@@ -47,6 +47,14 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        heritage: {
+          terracotta: "hsl(var(--heritage-terracotta))",
+          indigo: "hsl(var(--heritage-indigo))",
+          gold: "hsl(var(--heritage-gold))",
+          cream: "hsl(var(--heritage-cream))",
+          stone: "hsl(var(--heritage-stone))",
+          earth: "hsl(var(--heritage-earth))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -80,10 +88,35 @@ export default {
             height: "0",
           },
         },
+        "float": {
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-20px)" },
+        },
+        "glow": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.5" },
+        },
+        "slide-in": {
+          from: { transform: "translateX(-100%)", opacity: "0" },
+          to: { transform: "translateX(0)", opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "float": "float 6s ease-in-out infinite",
+        "glow": "glow 2s ease-in-out infinite",
+        "slide-in": "slide-in 0.5s ease-out",
+      },
+      backgroundImage: {
+        "gradient-hero": "var(--gradient-hero)",
+        "gradient-card": "var(--gradient-card)",
+        "gradient-monument": "var(--gradient-monument)",
+      },
+      boxShadow: {
+        "monument": "var(--shadow-monument)",
+        "card-soft": "var(--shadow-card)",
+        "glow": "var(--shadow-glow)",
       },
     },
   },
