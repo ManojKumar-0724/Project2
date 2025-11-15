@@ -5,6 +5,7 @@ import monument3 from "@/assets/monument-3.jpg";
 
 const monuments = [
   {
+    monumentId: "hampi",
     title: "Hampi Ruins",
     location: "Karnataka",
     image: monument1,
@@ -13,6 +14,7 @@ const monuments = [
     era: "14th Century",
   },
   {
+    monumentId: "meenakshi",
     title: "Meenakshi Temple",
     location: "Tamil Nadu",
     image: monument2,
@@ -21,6 +23,7 @@ const monuments = [
     era: "12th Century",
   },
   {
+    monumentId: "golconda",
     title: "Golconda Fort",
     location: "Telangana",
     image: monument3,

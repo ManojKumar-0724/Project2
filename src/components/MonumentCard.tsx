@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Clock, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 interface MonumentCardProps {
   title: string;
@@ -10,9 +11,12 @@ interface MonumentCardProps {
   stories: number;
   rating: number;
   era: string;
+  monumentId: string;
 }
 
-export const MonumentCard = ({ title, location, image, stories, rating, era }: MonumentCardProps) => {
+export const MonumentCard = ({ title, location, image, stories, rating, era, monumentId }: MonumentCardProps) => {
+  const navigate = useNavigate();
+
   return (
     <Card className="group overflow-hidden border-0 shadow-card-soft hover:shadow-monument transition-all duration-500 cursor-pointer">
       <div className="relative h-64 overflow-hidden">
@@ -32,7 +36,10 @@ export const MonumentCard = ({ title, location, image, stories, rating, era }: M
 
         {/* View AR Button - appears on hover */}
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-          <Button className="bg-heritage-terracotta hover:bg-heritage-terracotta/90 text-heritage-cream shadow-glow">
+          <Button 
+            onClick={() => navigate(`/ar?monument=${monumentId}`)}
+            className="bg-heritage-terracotta hover:bg-heritage-terracotta/90 text-heritage-cream shadow-glow"
+          >
             View in AR
           </Button>
         </div>
