@@ -1,39 +1,60 @@
+import { useEffect, useState } from "react";
 import { MonumentCard } from "./MonumentCard";
-import monument1 from "@/assets/monument-1.jpg";
-import monument2 from "@/assets/monument-2.jpg";
-import monument3 from "@/assets/monument-3.jpg";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
-const monuments = [
-  {
-    monumentId: "hampi",
-    title: "Hampi Ruins",
-    location: "Karnataka",
-    image: monument1,
-    stories: 12,
-    rating: 4.8,
-    era: "14th Century",
-  },
-  {
-    monumentId: "meenakshi",
-    title: "Meenakshi Temple",
-    location: "Tamil Nadu",
-    image: monument2,
-    stories: 18,
-    rating: 4.9,
-    era: "12th Century",
-  },
-  {
-    monumentId: "golconda",
-    title: "Golconda Fort",
-    location: "Telangana",
-    image: monument3,
-    stories: 15,
-    rating: 4.7,
-    era: "16th Century",
-  },
-];
+interface Monument {
+  id: string;
+  title: string;
+  location: string;
+  image_url: string;
+  stories_count: number;
+  rating: number;
+  era: string;
+  description: string | null;
+}
 
 export const MonumentGallery = () => {
+  const [monuments, setMonuments] = useState<Monument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchMonuments();
+  }, []);
+
+  const fetchMonuments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("monuments")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      setMonuments(data || []);
+    } catch (error) {
+      toast({
+        title: "Error loading monuments",
+        description: "Failed to fetch monuments. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <section className="py-24 bg-background">
+        <div className="container mx-auto px-4 flex justify-center items-center min-h-[400px]">
+          <Loader2 className="w-8 h-8 animate-spin text-heritage-terracotta" />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="py-24 bg-background">
       <div className="container mx-auto px-4">
@@ -46,17 +67,33 @@ export const MonumentGallery = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {monuments.map((monument, index) => (
-            <div
-              key={index}
-              className="animate-slide-in"
-              style={{ animationDelay: `${index * 0.1}s` }}
-            >
-              <MonumentCard {...monument} />
-            </div>
-          ))}
-        </div>
+        {monuments.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground text-lg">
+              No monuments found. Check back soon!
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {monuments.map((monument, index) => (
+              <div
+                key={monument.id}
+                className="animate-slide-in"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <MonumentCard
+                  monumentId={monument.id}
+                  title={monument.title}
+                  location={monument.location}
+                  image={monument.image_url}
+                  stories={monument.stories_count}
+                  rating={monument.rating}
+                  era={monument.era}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

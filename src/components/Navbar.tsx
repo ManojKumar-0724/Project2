@@ -41,10 +41,15 @@ export const Navbar = () => {
           <div className="hidden md:flex items-center gap-4">
             {user ? (
               <>
-                <span className="text-sm text-muted-foreground flex items-center gap-1">
+                <Button
+                  onClick={() => navigate("/favorites")}
+                  variant="ghost"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
                   <User className="w-4 h-4" />
-                  {user.email}
-                </span>
+                  My Favorites
+                </Button>
                 <Button
                   onClick={() => signOut()}
                   variant="outline"
@@ -103,10 +108,14 @@ export const Navbar = () => {
             
             {user ? (
               <>
-                <div className="py-2 text-sm text-muted-foreground flex items-center gap-1">
-                  <User className="w-4 h-4" />
-                  {user.email}
-                </div>
+                <Button
+                  onClick={() => navigate("/favorites")}
+                  variant="ghost"
+                  className="w-full justify-start"
+                >
+                  <User className="w-4 h-4 mr-2" />
+                  My Favorites
+                </Button>
                 <Button
                   onClick={() => signOut()}
                   variant="outline"
