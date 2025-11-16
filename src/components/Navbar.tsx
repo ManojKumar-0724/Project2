@@ -1,16 +1,20 @@
-import { Button } from "@/components/ui/button";
-import { Menu, Scan } from "lucide-react";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Menu, Scan, User, LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/")}>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-heritage-terracotta to-heritage-gold flex items-center justify-center">
               <Scan className="w-6 h-6 text-white" />
             </div>
@@ -33,12 +37,31 @@ export const Navbar = () => {
             </a>
           </div>
 
-          {/* CTA Button */}
-          <div className="hidden md:block">
-            <Button className="bg-heritage-terracotta hover:bg-heritage-terracotta/90 text-heritage-cream">
-              <Scan className="mr-2 h-4 w-4" />
-              Start AR
-            </Button>
+          {/* Auth Section */}
+          <div className="hidden md:flex items-center gap-4">
+            {user ? (
+              <>
+                <span className="text-sm text-muted-foreground flex items-center gap-1">
+                  <User className="w-4 h-4" />
+                  {user.email}
+                </span>
+                <Button
+                  onClick={() => signOut()}
+                  variant="outline"
+                  size="sm"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={() => navigate("/auth")}
+                className="bg-heritage-terracotta hover:bg-heritage-terracotta/90 text-heritage-cream"
+              >
+                Sign In
+              </Button>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -77,10 +100,30 @@ export const Navbar = () => {
             >
               Quizzes
             </a>
-            <Button className="w-full bg-heritage-terracotta hover:bg-heritage-terracotta/90 text-heritage-cream">
-              <Scan className="mr-2 h-4 w-4" />
-              Start AR
-            </Button>
+            
+            {user ? (
+              <>
+                <div className="py-2 text-sm text-muted-foreground flex items-center gap-1">
+                  <User className="w-4 h-4" />
+                  {user.email}
+                </div>
+                <Button
+                  onClick={() => signOut()}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={() => navigate("/auth")}
+                className="w-full bg-heritage-terracotta hover:bg-heritage-terracotta/90 text-heritage-cream"
+              >
+                Sign In
+              </Button>
+            )}
           </div>
         )}
       </div>
