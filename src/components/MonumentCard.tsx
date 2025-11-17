@@ -21,7 +21,10 @@ export const MonumentCard = ({ title, location, image, stories, rating, era, mon
   const { isFavorite, loading, toggleFavorite } = useFavorites(monumentId);
 
   return (
-    <Card className="group overflow-hidden border-0 shadow-card-soft hover:shadow-monument transition-all duration-500 cursor-pointer">
+    <Card 
+      onClick={() => navigate(`/monument?id=${monumentId}`)}
+      className="group overflow-hidden border-0 shadow-card-soft hover:shadow-monument transition-all duration-500 cursor-pointer"
+    >
       <div className="relative h-64 overflow-hidden">
         <img
           src={image}

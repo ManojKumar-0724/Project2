@@ -7,6 +7,9 @@ import Index from "./pages/Index";
 import ARViewer from "./pages/ARViewer";
 import Auth from "./pages/Auth";
 import Favorites from "./pages/Favorites";
+import MonumentDetails from "./pages/MonumentDetails";
+import Quiz from "./pages/Quiz";
+import Contribute from "./pages/Contribute";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +25,9 @@ const App = () => (
           <Route path="/ar" element={<ARViewer />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/favorites" element={<Favorites />} />
+          <Route path="/monument" element={<MonumentDetails />} />
+          <Route path="/quiz" element={<Quiz />} />
+          <Route path="/contribute" element={<Contribute />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -43,11 +43,20 @@ export const Hero = () => {
           </p>
 
           <div className="flex flex-wrap gap-4 mb-12">
-            <Button size="lg" className="bg-heritage-terracotta hover:bg-heritage-terracotta/90 text-heritage-cream shadow-monument">
+            <Button 
+              size="lg" 
+              onClick={() => window.location.href = '/ar'}
+              className="bg-heritage-terracotta hover:bg-heritage-terracotta/90 text-heritage-cream shadow-monument"
+            >
               <Scan className="mr-2 h-5 w-5" />
               Start AR Experience
             </Button>
-            <Button size="lg" variant="outline" className="border-heritage-cream/30 text-heritage-cream hover:bg-heritage-cream/10 backdrop-blur-sm">
+            <Button 
+              size="lg" 
+              variant="outline" 
+              onClick={() => window.location.href = '#monuments'}
+              className="border-heritage-cream/30 text-heritage-cream hover:bg-heritage-cream/10 backdrop-blur-sm"
+            >
               <Globe className="mr-2 h-5 w-5" />
               Explore Monuments
             </Button>

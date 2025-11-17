@@ -1,1 +1,10 @@
 project_id = "bcoulsbqvxfsgqjpoekt"
+
+[functions.text-to-speech]
+verify_jwt = false
+
+[functions.summarize-text]
+verify_jwt = false
+
+[functions.generate-quiz]
+verify_jwt = false
