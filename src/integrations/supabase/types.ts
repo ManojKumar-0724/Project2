@@ -109,6 +109,47 @@ export type Database = {
         }
         Relationships: []
       }
+      stories: {
+        Row: {
+          author_name: string | null
+          content: string
+          created_at: string
+          id: string
+          monument_id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          author_name?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          monument_id: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          author_name?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          monument_id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stories_monument_id_fkey"
+            columns: ["monument_id"]
+            isOneToOne: false
+            referencedRelation: "monuments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
