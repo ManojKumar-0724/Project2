@@ -96,20 +96,47 @@ export default function MonumentDetails() {
     
     setAudioLoading(true);
     try {
+      // First get AI-enhanced narration text
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
         body: { text: monument.description, language }
       });
 
       if (error) throw error;
 
-      setNarrationText(data.text);
+      const textToSpeak = data.text || monument.description;
+      setNarrationText(textToSpeak);
       setNarrationLanguage(language === 'en' ? 'English' : 'Kannada');
       setNarrationModal(true);
 
-      toast({
-        title: "Narration Generated",
-        description: `${language === 'en' ? 'English' : 'Kannada'} narration is ready`,
-      });
+      // Use Web Speech API for actual audio playback
+      if ('speechSynthesis' in window) {
+        // Cancel any ongoing speech
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(textToSpeak);
+        utterance.lang = language === 'en' ? 'en-US' : 'kn-IN';
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        
+        // Get available voices and select appropriate one
+        const voices = window.speechSynthesis.getVoices();
+        const langCode = language === 'en' ? 'en' : 'kn';
+        const voice = voices.find(v => v.lang.startsWith(langCode)) || voices[0];
+        if (voice) utterance.voice = voice;
+        
+        window.speechSynthesis.speak(utterance);
+        
+        toast({
+          title: "Now Playing",
+          description: `${language === 'en' ? 'English' : 'Kannada'} narration started`,
+        });
+      } else {
+        toast({
+          title: "Narration Ready",
+          description: "Your browser doesn't support audio playback. Read the text below.",
+          variant: "default",
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -408,7 +435,12 @@ export default function MonumentDetails() {
       </main>
 
       {/* Narration Modal */}
-      <Dialog open={narrationModal} onOpenChange={setNarrationModal}>
+      <Dialog open={narrationModal} onOpenChange={(open) => {
+        setNarrationModal(open);
+        if (!open && 'speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+      }}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -423,6 +455,34 @@ export default function MonumentDetails() {
             <p className="text-foreground whitespace-pre-line leading-relaxed">
               {narrationText}
             </p>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <Button
+              onClick={() => {
+                if ('speechSynthesis' in window) {
+                  window.speechSynthesis.cancel();
+                  const utterance = new SpeechSynthesisUtterance(narrationText);
+                  utterance.lang = narrationLanguage === 'English' ? 'en-US' : 'kn-IN';
+                  utterance.rate = 0.9;
+                  window.speechSynthesis.speak(utterance);
+                }
+              }}
+              className="flex-1"
+            >
+              <Volume2 className="mr-2 h-4 w-4" />
+              Play Again
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if ('speechSynthesis' in window) {
+                  window.speechSynthesis.cancel();
+                }
+              }}
+              className="flex-1"
+            >
+              Stop
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
