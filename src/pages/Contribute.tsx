@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, PenTool } from "lucide-react";
+import { Loader2, PenTool, ImagePlus, X } from "lucide-react";
 
 export default function Contribute() {
   const [searchParams] = useSearchParams();
@@ -24,6 +24,10 @@ export default function Contribute() {
   const [authorName, setAuthorName] = useState('');
   const [loading, setLoading] = useState(false);
   const [monumentsLoading, setMonumentsLoading] = useState(true);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -61,6 +65,82 @@ export default function Contribute() {
     }
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file",
+        description: "Please select an image file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please select an image smaller than 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setImageFile(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const uploadImage = async (): Promise<string | null> => {
+    if (!imageFile || !user) return null;
+
+    setUploading(true);
+
+    try {
+      const fileExt = imageFile.name.split(".").pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("story-images")
+        .upload(filePath, imageFile);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("story-images")
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error: any) {
+      console.error("Image upload error:", error);
+      toast({
+        title: "Image upload failed",
+        description: error.message || "Failed to upload image",
+        variant: "destructive",
+      });
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -82,9 +162,24 @@ export default function Contribute() {
       return;
     }
 
+    if (content.length < 100) {
+      toast({
+        title: "Content too short",
+        description: "Please write at least 100 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
+      // Upload image if present
+      let imageUrl: string | null = null;
+      if (imageFile) {
+        imageUrl = await uploadImage();
+      }
+
       const { error } = await supabase
         .from('stories')
         .insert({
@@ -92,7 +187,8 @@ export default function Contribute() {
           user_id: user.id,
           title,
           content,
-          author_name: authorName || 'Anonymous'
+          author_name: authorName || 'Anonymous',
+          image_url: imageUrl
         });
 
       if (error) throw error;
@@ -106,6 +202,8 @@ export default function Contribute() {
       setTitle('');
       setContent('');
       setAuthorName('');
+      setImageFile(null);
+      setImagePreview(null);
       if (!preselectedMonumentId) {
         setSelectedMonument('');
       }
@@ -206,20 +304,64 @@ export default function Contribute() {
                   required
                 />
                 <p className="text-sm text-muted-foreground">
-                  Minimum 100 characters. Be descriptive and engaging!
+                  {content.length}/100 minimum characters
                 </p>
+              </div>
+
+              {/* Image Upload Section */}
+              <div className="space-y-2">
+                <Label>Story Image (optional)</Label>
+                <div className="flex flex-col gap-4">
+                  {imagePreview ? (
+                    <div className="relative inline-block">
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="max-w-full max-h-64 rounded-lg object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={removeImage}
+                        className="absolute -top-2 -right-2 p-1 bg-destructive text-destructive-foreground rounded-full hover:bg-destructive/90"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-border rounded-lg hover:border-heritage-terracotta hover:bg-heritage-terracotta/5 transition-colors cursor-pointer"
+                    >
+                      <ImagePlus className="w-10 h-10 text-muted-foreground mb-2" />
+                      <span className="text-sm text-muted-foreground">
+                        Click to upload an image
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        PNG, JPG up to 5MB
+                      </span>
+                    </button>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    className="hidden"
+                  />
+                </div>
               </div>
 
               <div className="flex gap-4">
                 <Button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || uploading}
                   className="flex-1 bg-heritage-terracotta hover:bg-heritage-terracotta/90"
                 >
-                  {loading ? (
+                  {loading || uploading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Submitting...
+                      {uploading ? "Uploading image..." : "Submitting..."}
                     </>
                   ) : (
                     'Submit Story'
@@ -243,7 +385,7 @@ export default function Contribute() {
               <li>Be respectful of cultural sensitivities and traditions</li>
               <li>Include personal experiences or oral histories when relevant</li>
               <li>Cite sources if sharing historical facts</li>
-              <li>Stories will be reviewed before publication</li>
+              <li>Upload relevant images to enhance your story</li>
             </ul>
           </div>
         </div>

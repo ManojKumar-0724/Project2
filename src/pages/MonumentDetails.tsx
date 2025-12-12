@@ -10,6 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, MapPin, Clock, Star, Volume2, Gamepad2, Heart, ArrowLeft, Eye, PenTool } from "lucide-react";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useRating } from "@/hooks/useRating";
+import { StarRating } from "@/components/StarRating";
 import { cn } from "@/lib/utils";
 
 interface Monument {
@@ -47,6 +49,7 @@ export default function MonumentDetails() {
   const [narrationLanguage, setNarrationLanguage] = useState('');
   const { toast } = useToast();
   const { isFavorite, loading: favoriteLoading, toggleFavorite } = useFavorites(monumentId || '');
+  const { userRating, averageRating, totalRatings, loading: ratingLoading, submitRating } = useRating(monumentId || '');
 
   useEffect(() => {
     if (monumentId) {
@@ -242,10 +245,13 @@ export default function MonumentDetails() {
                     <Clock className="w-5 h-5" />
                     <span>{monument.era}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Star className="w-5 h-5 fill-heritage-gold text-heritage-gold" />
-                    <span>{monument.rating}</span>
-                  </div>
+                  <StarRating 
+                    rating={averageRating} 
+                    userRating={userRating}
+                    totalRatings={totalRatings}
+                    onRate={submitRating}
+                    size="md"
+                  />
                 </div>
               </div>
               

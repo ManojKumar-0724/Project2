@@ -10,6 +10,8 @@ import Favorites from "./pages/Favorites";
 import MonumentDetails from "./pages/MonumentDetails";
 import Quiz from "./pages/Quiz";
 import Contribute from "./pages/Contribute";
+import Profile from "./pages/Profile";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +30,8 @@ const App = () => (
           <Route path="/monument" element={<MonumentDetails />} />
           <Route path="/quiz" element={<Quiz />} />
           <Route path="/contribute" element={<Contribute />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/admin" element={<Admin />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
