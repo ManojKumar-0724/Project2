@@ -14,7 +14,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Shield, Plus, Trash2, Edit, Users, Landmark, BookOpen } from "lucide-react";
+import { Loader2, Shield, Plus, Trash2, Edit, Users, Landmark, BookOpen, BarChart3 } from "lucide-react";
+import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 
 interface Monument {
   id: string;
@@ -285,9 +286,10 @@ export default function Admin() {
         </div>
 
         <Tabs defaultValue="monuments" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-6">
+          <TabsList className="grid w-full grid-cols-3 mb-6">
             <TabsTrigger value="monuments">Monuments</TabsTrigger>
             <TabsTrigger value="stories">Stories</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
           <TabsContent value="monuments">
@@ -455,6 +457,16 @@ export default function Admin() {
                   </TableBody>
                 </Table>
               </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="analytics">
+            <Card className="p-6">
+              <h2 className="text-xl font-semibold text-foreground mb-6 flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Analytics Dashboard
+              </h2>
+              <AnalyticsDashboard />
             </Card>
           </TabsContent>
         </Tabs>

@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useViewTracking } from "@/hooks/useViewTracking";
 import { Loader2, Trophy, ArrowLeft } from "lucide-react";
 
 interface Question {
@@ -27,6 +28,7 @@ export default function Quiz() {
   const [showResult, setShowResult] = useState(false);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { trackQuizCompletion } = useViewTracking();
 
   useEffect(() => {
     if (monumentId) {
@@ -72,9 +74,13 @@ export default function Quiz() {
     setSelectedAnswer(answerIndex);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    const newScore = selectedAnswer === questions[currentQuestion].correctAnswer 
+      ? score + 1 
+      : score;
+    
     if (selectedAnswer === questions[currentQuestion].correctAnswer) {
-      setScore(score + 1);
+      setScore(newScore);
     }
 
     if (currentQuestion + 1 < questions.length) {
@@ -82,6 +88,10 @@ export default function Quiz() {
       setSelectedAnswer(null);
     } else {
       setShowResult(true);
+      // Track quiz completion
+      if (monumentId) {
+        await trackQuizCompletion(monumentId, newScore, questions.length);
+      }
     }
   };
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, MapPin, Clock, Star, Volume2, Gamepad2, Heart, ArrowLeft, Eye, PenTool } from "lucide-react";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useRating } from "@/hooks/useRating";
+import { useViewTracking } from "@/hooks/useViewTracking";
 import { StarRating } from "@/components/StarRating";
 import { cn } from "@/lib/utils";
 
@@ -50,11 +51,18 @@ export default function MonumentDetails() {
   const { toast } = useToast();
   const { isFavorite, loading: favoriteLoading, toggleFavorite } = useFavorites(monumentId || '');
   const { userRating, averageRating, totalRatings, loading: ratingLoading, submitRating } = useRating(monumentId || '');
+  const { trackMonumentView, trackStoryView } = useViewTracking();
+  const viewTrackedRef = useRef(false);
 
   useEffect(() => {
     if (monumentId) {
       fetchMonument();
       fetchStories();
+      // Track monument view (only once per page load)
+      if (!viewTrackedRef.current) {
+        trackMonumentView(monumentId);
+        viewTrackedRef.current = true;
+      }
     }
   }, [monumentId]);
 
@@ -99,6 +107,11 @@ export default function MonumentDetails() {
     
     setAudioLoading(true);
     try {
+      // Track story/narration view with language for analytics
+      if (stories.length > 0) {
+        trackStoryView(stories[0].id, language);
+      }
+
       // First get AI-enhanced narration text
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
         body: { text: monument.description, language }
