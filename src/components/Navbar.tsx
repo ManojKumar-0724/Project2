@@ -26,6 +26,7 @@ export const Navbar = () => {
   };
 
   const navLinks = [
+    { path: "/", label: "Home" },
     { path: "/monuments", label: "Monuments" },
     { path: "/stories", label: "Stories" },
     { path: "/contribute", label: "Contribute" },
