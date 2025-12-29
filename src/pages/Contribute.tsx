@@ -29,7 +29,7 @@ export default function Contribute() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -37,6 +37,7 @@ export default function Contribute() {
   }, []);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!user) {
       toast({
         title: "Sign in required",
@@ -44,7 +45,7 @@ export default function Contribute() {
       });
       navigate('/auth');
     }
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
 
   const fetchMonuments = async () => {
     try {

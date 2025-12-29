@@ -15,7 +15,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Shield, Plus, Trash2, Edit, Users, Landmark, BookOpen, BarChart3 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Shield, Plus, Trash2, Edit, Users, Landmark, BookOpen, BarChart3, Check, XCircle } from "lucide-react";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 
 interface Monument {
@@ -35,6 +36,9 @@ interface Story {
   author_name: string | null;
   monument_id: string;
   created_at: string;
+  status: "pending" | "approved" | "rejected";
+  rejection_reason: string | null;
+  content: string;
   monuments?: { title: string };
 }
 
@@ -47,14 +51,18 @@ interface UserWithRole {
 
 export default function Admin() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: roleLoading } = useUserRole();
   const { toast } = useToast();
 
   const [monuments, setMonuments] = useState<Monument[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
+  const [pendingStories, setPendingStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [moderating, setModerating] = useState(false);
+  const [storyDialogOpen, setStoryDialogOpen] = useState(false);
+  const [creatingStory, setCreatingStory] = useState(false);
 
   // Monument form state
   const [monumentDialogOpen, setMonumentDialogOpen] = useState(false);
@@ -67,23 +75,23 @@ export default function Admin() {
     description: "",
   });
 
-  useEffect(() => {
-    if (!user) {
-      navigate("/auth");
-      return;
-    }
-  }, [user, navigate]);
+  const [storyForm, setStoryForm] = useState({
+    title: "",
+    content: "",
+    author_name: "",
+    monument_id: "",
+    status: "approved" as "approved" | "pending",
+  });
 
   useEffect(() => {
-    if (!roleLoading && !isAdmin) {
-      toast({
-        title: "Access Denied",
-        description: "You don't have permission to access the admin dashboard",
-        variant: "destructive",
-      });
-      navigate("/");
+    if (authLoading) return;
+    if (!user) {
+      // Do not hard-redirect repeatedly; let UI render gated view below.
+      return;
     }
-  }, [roleLoading, isAdmin, navigate]);
+  }, [authLoading, user]);
+
+  // Avoid auto-redirect; show gated UI when not admin
 
   useEffect(() => {
     if (isAdmin) {
@@ -111,11 +119,13 @@ export default function Admin() {
   const fetchStories = async () => {
     const { data, error } = await supabase
       .from("stories")
-      .select("id, title, author_name, monument_id, created_at, monuments(title)")
+      .select("id, title, author_name, monument_id, created_at, status, rejection_reason, content, monuments(title)")
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      setStories(data as Story[]);
+      const storiesData = data as Story[];
+      setStories(storiesData);
+      setPendingStories(storiesData.filter((story) => story.status === "pending"));
     }
   };
 
@@ -205,6 +215,81 @@ export default function Admin() {
     }
   };
 
+  const updateStoryStatus = async (
+    id: string,
+    status: "approved" | "rejected",
+    rejection_reason?: string
+  ) => {
+    setModerating(true);
+    try {
+      const { error } = await supabase
+        .from("stories")
+        .update({
+          status,
+          rejection_reason: status === "rejected" ? rejection_reason || "Rejected by admin" : null,
+          moderated_at: new Date().toISOString(),
+          moderated_by: user?.id || null,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      toast({ title: status === "approved" ? "Story approved" : "Story rejected" });
+      fetchStories();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update story status",
+        variant: "destructive",
+      });
+    } finally {
+      setModerating(false);
+    }
+  };
+
+  const handleCreateStory = async () => {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Please sign in again", variant: "destructive" });
+      return;
+    }
+
+    if (!storyForm.title || !storyForm.content || !storyForm.monument_id) {
+      toast({
+        title: "Missing fields",
+        description: "Title, content, and monument are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setCreatingStory(true);
+    try {
+      const { error } = await supabase.from("stories").insert({
+        title: storyForm.title,
+        content: storyForm.content,
+        author_name: storyForm.author_name || null,
+        monument_id: storyForm.monument_id,
+        status: storyForm.status,
+        user_id: user.id,
+      });
+
+      if (error) throw error;
+
+      toast({ title: "Story created" });
+      setStoryDialogOpen(false);
+      setStoryForm({ title: "", content: "", author_name: "", monument_id: "", status: "approved" });
+      fetchStories();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create story",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingStory(false);
+    }
+  };
+
   const openEditMonument = (monument: Monument) => {
     setEditingMonument(monument);
     setMonumentForm({
@@ -217,7 +302,20 @@ export default function Admin() {
     setMonumentDialogOpen(true);
   };
 
-  if (loading || roleLoading) {
+  const statusBadgeClass = (status: Story["status"]) => {
+    switch (status) {
+      case "approved":
+        return "bg-green-100 text-green-800";
+      case "pending":
+        return "bg-amber-100 text-amber-800";
+      case "rejected":
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-muted text-foreground";
+    }
+  };
+
+  if (loading || roleLoading || authLoading) {
     return (
       <div className="min-h-screen">
         <Navbar />
@@ -229,8 +327,43 @@ export default function Admin() {
     );
   }
 
+  if (!user) {
+    return (
+      <div className="min-h-screen">
+        <Navbar />
+        <main className="container mx-auto px-4 py-24">
+          <Card className="max-w-2xl mx-auto p-8 text-center space-y-6">
+            <Shield className="w-10 h-10 mx-auto text-heritage-terracotta" />
+            <h1 className="text-3xl font-bold text-foreground">Sign in required</h1>
+            <p className="text-muted-foreground">Please sign in to access the admin dashboard.</p>
+            <div className="flex gap-4 justify-center">
+              <Button onClick={() => navigate('/auth')}>Go to Sign In</Button>
+              <Button variant="outline" onClick={() => navigate('/')}>Back to Home</Button>
+            </div>
+          </Card>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   if (!isAdmin) {
-    return null;
+    return (
+      <div className="min-h-screen">
+        <Navbar />
+        <main className="container mx-auto px-4 py-24">
+          <Card className="max-w-2xl mx-auto p-8 text-center space-y-6">
+            <Shield className="w-10 h-10 mx-auto text-heritage-terracotta" />
+            <h1 className="text-3xl font-bold text-foreground">Access denied</h1>
+            <p className="text-muted-foreground">Your account does not have admin privileges.</p>
+            <div className="flex gap-4 justify-center">
+              <Button variant="outline" onClick={() => navigate('/')}>Back to Home</Button>
+            </div>
+          </Card>
+        </main>
+        <Footer />
+      </div>
+    );
   }
 
   return (
@@ -425,39 +558,199 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="stories">
-            <Card className="p-6">
-              <h2 className="text-xl font-semibold text-foreground mb-6">Moderate Stories</h2>
-              <div className="rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Author</TableHead>
-                      <TableHead>Monument</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {stories.map((story) => (
-                      <TableRow key={story.id}>
-                        <TableCell className="font-medium">{story.title}</TableCell>
-                        <TableCell>{story.author_name || "Anonymous"}</TableCell>
-                        <TableCell>{story.monuments?.title || "Unknown"}</TableCell>
-                        <TableCell>{new Date(story.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDeleteStory(story.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
+            <Card className="p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                  <BookOpen className="h-5 w-5" /> Stories & Contributions
+                </h2>
+                <Dialog open={storyDialogOpen} onOpenChange={setStoryDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-heritage-terracotta hover:bg-heritage-terracotta/90">
+                      <Plus className="mr-2 h-4 w-4" /> Add Story
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Add Story</DialogTitle>
+                      <DialogDescription>Create or fast-track an approved story.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label>Monument *</Label>
+                        <Select
+                          value={storyForm.monument_id}
+                          onValueChange={(value) => setStoryForm({ ...storyForm, monument_id: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a monument" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {monuments.map((mon) => (
+                              <SelectItem key={mon.id} value={mon.id}>
+                                {mon.title}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Title *</Label>
+                        <Input
+                          value={storyForm.title}
+                          onChange={(e) => setStoryForm({ ...storyForm, title: e.target.value })}
+                          placeholder="Story title"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Author</Label>
+                        <Input
+                          value={storyForm.author_name}
+                          onChange={(e) => setStoryForm({ ...storyForm, author_name: e.target.value })}
+                          placeholder="Author name (optional)"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Content *</Label>
+                        <Textarea
+                          value={storyForm.content}
+                          onChange={(e) => setStoryForm({ ...storyForm, content: e.target.value })}
+                          rows={8}
+                          placeholder="Enter the full story..."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Status</Label>
+                        <Select
+                          value={storyForm.status}
+                          onValueChange={(value) => setStoryForm({ ...storyForm, status: value as "approved" | "pending" })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="approved">Approved</SelectItem>
+                            <SelectItem value="pending">Pending</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setStoryDialogOpen(false)}>Cancel</Button>
+                      <Button onClick={handleCreateStory} disabled={creatingStory}>
+                        {creatingStory ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Create
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-heritage-terracotta" />
+                  <h3 className="text-lg font-semibold">Pending approvals ({pendingStories.length})</h3>
+                </div>
+                {pendingStories.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No pending submissions.</p>
+                ) : (
+                  <div className="rounded-md border overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Title</TableHead>
+                          <TableHead>Author</TableHead>
+                          <TableHead>Monument</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pendingStories.map((story) => (
+                          <TableRow key={story.id}>
+                            <TableCell className="font-medium">{story.title}</TableCell>
+                            <TableCell>{story.author_name || "Anonymous"}</TableCell>
+                            <TableCell>{story.monuments?.title || "Unknown"}</TableCell>
+                            <TableCell>{new Date(story.created_at).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-right flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={moderating}
+                                onClick={() => updateStoryStatus(story.id, "approved")}
+                              >
+                                <Check className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={moderating}
+                                onClick={() => {
+                                  const reason = prompt("Add an optional rejection reason", "Not aligned with guidelines");
+                                  updateStoryStatus(story.id, "rejected", reason || undefined);
+                                }}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5 text-heritage-indigo" />
+                  <h3 className="text-lg font-semibold">All stories</h3>
+                </div>
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Author</TableHead>
+                        <TableHead>Monument</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {stories.map((story) => (
+                        <TableRow key={story.id}>
+                          <TableCell className="font-medium">{story.title}</TableCell>
+                          <TableCell>{story.author_name || "Anonymous"}</TableCell>
+                          <TableCell>{story.monuments?.title || "Unknown"}</TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusBadgeClass(story.status)}`}>
+                              {story.status}
+                            </span>
+                          </TableCell>
+                          <TableCell>{new Date(story.created_at).toLocaleDateString()}</TableCell>
+                          <TableCell className="text-right flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={moderating}
+                              onClick={() => updateStoryStatus(story.id, "approved")}
+                            >
+                              <Check className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteStory(story.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </Card>
           </TabsContent>

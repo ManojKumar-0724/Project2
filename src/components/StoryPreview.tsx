@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type StoryRecord = {
   id: string;
@@ -21,19 +22,62 @@ type StoryRecord = {
   } | null;
 };
 
+type Monument = {
+  id: string;
+  title: string;
+};
+
+// Helper function to generate summaries of different lengths
+const generateSummary = (content: string, wordLimit: number): string => {
+  const words = content.split(' ');
+  if (words.length <= wordLimit) return content;
+  return words.slice(0, wordLimit).join(' ') + '...';
+};
+
 export const StoryPreview = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [audioLoading, setAudioLoading] = useState(false);
   const [story, setStory] = useState<StoryRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [monuments, setMonuments] = useState<Monument[]>([]);
+  const [selectedMonumentId, setSelectedMonumentId] = useState<string>('');
 
   useEffect(() => {
+    const fetchMonuments = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('monuments')
+          .select('id, title')
+          .order('title');
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          setMonuments(data);
+          setSelectedMonumentId(data[0].id);
+        }
+      } catch (error: any) {
+        toast({
+          title: 'Error loading monuments',
+          description: error.message,
+          variant: 'destructive',
+        });
+      }
+    };
+
+    fetchMonuments();
+  }, [toast]);
+
+  useEffect(() => {
+    if (!selectedMonumentId) return;
+
     const fetchStory = async () => {
       setLoading(true);
       const { data, error } = await supabase
         .from('stories')
         .select('id, title, content, author_name, monument_id, monuments(title, location, era)')
+        .eq('monument_id', selectedMonumentId)
         .eq('status', 'approved')
         .order('created_at', { ascending: false })
         .limit(1)
@@ -52,32 +96,75 @@ export const StoryPreview = () => {
     };
 
     fetchStory();
-  }, [toast]);
+  }, [selectedMonumentId, toast]);
 
   const handleAudio = async (language: string) => {
     setAudioLoading(true);
     try {
       const text = story?.content || '';
+      
+      if (!text) {
+        throw new Error('No story content available');
+      }
+
+      // Call the edge function to get audio from Google TTS
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text, language }
+        body: { text, language: language === 'en' ? 'en' : 'kn' }
       });
 
-      if (error) throw error;
-
-      if (data?.text) {
-        toast({
-          title: "Narration Generated",
-          description: `${language === 'en' ? 'English' : 'Kannada'} narration: "${data.text.substring(0, 100)}..."`,
-        });
+      if (error) {
+        throw new Error(error.message || 'Failed to generate audio');
       }
+
+      if (!data?.audioContent) {
+        throw new Error('No audio data received');
+      }
+
+      // Convert base64 to blob and play
+      const binaryString = atob(data.audioContent);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const audioBlob = new Blob([bytes], { type: 'audio/mpeg' });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+
+      audio.onplay = () => {
+        toast({
+          title: "Playing Narration",
+          description: `${language === 'en' ? 'English' : 'Kannada'} narration is now playing`,
+        });
+      };
+
+      audio.onended = () => {
+        setAudioLoading(false);
+        URL.revokeObjectURL(audioUrl);
+        toast({
+          title: "Narration Complete",
+          description: `${language === 'en' ? 'English' : 'Kannada'} narration finished`,
+        });
+      };
+
+      audio.onerror = () => {
+        setAudioLoading(false);
+        toast({
+          title: "Error",
+          description: "Failed to play audio",
+          variant: "destructive",
+        });
+      };
+
+      audio.play();
     } catch (error: any) {
+      setAudioLoading(false);
+      console.error('Audio error:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to generate audio",
+        description: error.message || "Failed to generate audio narration",
         variant: "destructive",
       });
-    } finally {
-      setAudioLoading(false);
     }
   };
 
@@ -95,6 +182,24 @@ export const StoryPreview = () => {
           </div>
 
           <Card className="p-8 border-0 shadow-monument bg-gradient-card">
+            <div className="mb-8">
+              <label className="block text-sm font-semibold text-foreground mb-2">
+                Select a Monument
+              </label>
+              <Select value={selectedMonumentId} onValueChange={setSelectedMonumentId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose a monument..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {monuments.map((monument) => (
+                    <SelectItem key={monument.id} value={monument.id}>
+                      {monument.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {loading && (
               <div className="flex items-center justify-center py-12 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading story...
@@ -139,22 +244,22 @@ export const StoryPreview = () => {
                   </div>
                 </div>
 
-                <Tabs defaultValue="short" className="w-full">
+                <Tabs defaultValue="medium" className="w-full">
                   <TabsList className="grid w-full grid-cols-3 mb-6">
                     <TabsTrigger value="short">Short (2 min)</TabsTrigger>
                     <TabsTrigger value="medium">Medium (5 min)</TabsTrigger>
-                    <TabsTrigger value="detailed">Detailed (10 min)</TabsTrigger>
+                    <TabsTrigger value="detailed">Detailed (Full)</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="short" className="space-y-4">
                     <div className="prose prose-lg max-w-none text-foreground whitespace-pre-line">
-                      <p className="leading-relaxed">{story.content}</p>
+                      <p className="leading-relaxed">{generateSummary(story.content, 75)}</p>
                     </div>
                   </TabsContent>
 
                   <TabsContent value="medium" className="space-y-4">
                     <div className="prose prose-lg max-w-none text-foreground whitespace-pre-line">
-                      <p className="leading-relaxed">{story.content}</p>
+                      <p className="leading-relaxed">{generateSummary(story.content, 150)}</p>
                     </div>
                   </TabsContent>
 
@@ -190,17 +295,6 @@ export const StoryPreview = () => {
                   >
                     <Eye className="mr-2 h-4 w-4" />
                     View in AR
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => {
-                      const el = document.getElementById('monuments');
-                      el?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className="border-heritage-terracotta text-heritage-terracotta hover:bg-heritage-terracotta/10"
-                  >
-                    <BookOpen className="mr-2 h-4 w-4" />
-                    Read More Stories
                   </Button>
                 </div>
               </>

@@ -18,45 +18,69 @@ serve(async (req) => {
       throw new Error('Text is required');
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    const GOOGLE_TTS_API_KEY = Deno.env.get('GOOGLE_TTS_API_KEY');
+    if (!GOOGLE_TTS_API_KEY) {
+      throw new Error('GOOGLE_TTS_API_KEY is not configured');
     }
 
-    // Use AI to generate speech-like text in the target language
-    const systemPrompt = language === 'kn' 
-      ? 'You are a narrator for cultural heritage stories. Translate the following English text to Kannada and make it engaging for audio narration.'
-      : 'You are a narrator for cultural heritage stories. Make the following text engaging for audio narration.';
-
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
+    // Map language codes to Google TTS language codes and voices
+    const languageConfig = {
+      'en': {
+        languageCode: 'en-US',
+        voice: 'en-US-Neural2-C'
       },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: text }
-        ],
-      }),
-    });
+      'kn': {
+        languageCode: 'kn-IN',
+        voice: 'kn-IN-Standard-A'
+      }
+    };
+
+    const config = languageConfig[language] || languageConfig['en'];
+
+    // Call Google Cloud Text-to-Speech API
+    const response = await fetch(
+      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${GOOGLE_TTS_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          input: {
+            text: text
+          },
+          voice: {
+            languageCode: config.languageCode,
+            name: config.voice,
+            ssmlGender: 'NEUTRAL'
+          },
+          audioConfig: {
+            audioEncoding: 'MP3',
+            pitch: 0,
+            speakingRate: 0.95
+          }
+        })
+      }
+    );
 
     if (!response.ok) {
       const error = await response.text();
-      console.error('AI Gateway error:', error);
-      throw new Error('Failed to generate speech text');
+      console.error('Google TTS API error:', error);
+      throw new Error('Failed to generate audio from Google TTS');
     }
 
     const data = await response.json();
-    const narrationText = data.choices[0].message.content;
+    
+    if (!data.audioContent) {
+      throw new Error('No audio content received from Google TTS');
+    }
 
+    // Return audio as base64
     return new Response(
       JSON.stringify({ 
-        text: narrationText,
+        audioContent: data.audioContent,
         language,
-        originalText: text
+        contentType: 'audio/mpeg'
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

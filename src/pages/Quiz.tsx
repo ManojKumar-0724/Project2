@@ -28,6 +28,7 @@ export default function Quiz() {
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { toast } = useToast();
   const { trackQuizCompletion } = useViewTracking();
 
@@ -48,7 +49,40 @@ export default function Quiz() {
 
       if (monumentError) throw monumentError;
 
-      // Generate quiz using AI
+      // Try to use stored quiz first (preferred)
+      const { data: template } = await supabase
+        .from('quiz_templates')
+        .select('id')
+        .eq('monument_id', monumentId)
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (template?.id) {
+        const { data: storedQuestions, error: qErr } = await supabase
+          .from('quiz_questions')
+          .select('question, options, correct_answer, explanation, order_index')
+          .eq('quiz_template_id', template.id)
+          .order('order_index', { ascending: true })
+          .order('created_at', { ascending: true });
+
+        if (qErr) throw qErr;
+
+        const mapped = (storedQuestions || []).map((q: any) => ({
+          question: q.question,
+          options: Array.isArray(q.options) ? q.options : Array.from((q.options || [])),
+          correctAnswer: q.correct_answer,
+          explanation: q.explanation || '',
+        }));
+
+        if (mapped.length > 0) {
+          setQuestions(mapped as Question[]);
+          return; // Done: use stored quiz
+        }
+      }
+
+      // Fallback: Generate quiz using edge function
       const { data, error } = await supabase.functions.invoke('generate-quiz', {
         body: {
           monumentText: `${monument.title}\n${monument.description}\nEra: ${monument.era}\nLocation: ${monument.location}`,
@@ -58,14 +92,15 @@ export default function Quiz() {
       });
 
       if (error) throw error;
-      setQuestions(data.questions);
+      const qs = Array.isArray(data?.questions) ? data.questions : [];
+      if (qs.length === 0) {
+        throw new Error('No quiz questions returned');
+      }
+      setQuestions(qs);
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to generate quiz",
-        variant: "destructive",
-      });
-      navigate(-1);
+      const msg = error?.message || "Failed to generate quiz";
+      setErrorMessage(msg);
+      toast({ title: "Error", description: msg, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -109,6 +144,26 @@ export default function Quiz() {
     );
   }
 
+  if (errorMessage || questions.length === 0) {
+    return (
+      <div className="min-h-screen">
+        <Navbar />
+        <main className="container mx-auto px-4 py-24">
+          <Card className="max-w-2xl mx-auto p-8 text-center space-y-6">
+            <h2 className="text-2xl font-bold text-foreground">Unable to generate quiz</h2>
+            <p className="text-muted-foreground">{errorMessage || 'No questions available for this monument.'}</p>
+            <div className="flex gap-4 justify-center flex-wrap">
+              <Button onClick={() => window.location.reload()}>Retry</Button>
+              <Button variant="outline" onClick={() => navigate(-1)}>Back</Button>
+              <Button variant="secondary" onClick={() => navigate('/')}>Home</Button>
+            </div>
+          </Card>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   if (showResult) {
     const percentage = (score / questions.length) * 100;
     return (
@@ -145,8 +200,9 @@ export default function Quiz() {
     );
   }
 
-  const question = questions[currentQuestion];
-  const progress = ((currentQuestion + 1) / questions.length) * 100;
+  const question = questions[currentQuestion] as Question;
+  const total = questions.length || 1;
+  const progress = ((currentQuestion + 1) / total) * 100;
 
   return (
     <div className="min-h-screen">
