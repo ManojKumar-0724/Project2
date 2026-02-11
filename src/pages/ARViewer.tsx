@@ -134,7 +134,7 @@ const ARViewer = () => {
         story: monument.description?.substring(0, 150) + "..." || "Explore this historic monument.",
       };
     }
-    const key = monumentId?.toLowerCase() || 'hampi';
+    const key = monumentId ? normalizeKey(monumentId) : 'hampi';
     return fallbackMonuments[key] || fallbackMonuments.hampi;
   };
 
@@ -146,7 +146,7 @@ const ARViewer = () => {
       const titleKey = normalizeKey(monument.title);
       if (modelConfigs[titleKey]) return modelConfigs[titleKey];
     }
-    const key = monumentId?.toLowerCase() || 'hampi';
+    const key = monumentId ? normalizeKey(monumentId) : 'hampi';
     return modelConfigs[key] || null;
   };
 
