@@ -313,13 +313,11 @@ const ARViewer = () => {
           const { OBJLoader } = await import('three/examples/jsm/loaders/OBJLoader.js');
           const { MTLLoader } = await import('three/examples/jsm/loaders/MTLLoader.js');
           
-          const mtlPath = modelConfig.url.replace('.obj', '.mtl');
-          const modelPath = modelConfig.url.substring(0, modelConfig.url.lastIndexOf('/') + 1);
-          
           const mtlLoader = new MTLLoader();
-          mtlLoader.setPath(modelPath);
+          const mtlPath = modelConfig.url.replace('.obj', '.mtl');
+          
           mtlLoader.load(
-            mtlPath.substring(mtlPath.lastIndexOf('/') + 1),
+            mtlPath,
             (materials) => {
               materials.preload();
               const objLoader = new OBJLoader();
@@ -328,6 +326,13 @@ const ARViewer = () => {
                 modelConfig.url,
                 (object) => {
                   modelRoot.clear();
+                  
+                  // Center the object
+                  const box = new THREE.Box3().setFromObject(object);
+                  const center = box.getCenter(new THREE.Vector3());
+                  object.position.x = -center.x;
+                  object.position.z = -center.z;
+                  
                   object.traverse((child: InstanceType<typeof THREE.Object3D>) => {
                     const mesh = child as InstanceType<typeof THREE.Mesh>;
                     if (mesh.isMesh) {
@@ -342,33 +347,44 @@ const ARViewer = () => {
                   }
                   modelRoot.add(object);
                 },
-                undefined,
-                () => {
+                (progress) => {
+                  console.log('OBJ loading:', (progress.loaded / progress.total * 100).toFixed(0) + '%');
+                },
+                (error) => {
+                  console.error('OBJ load error:', error);
                   createFallbackMonument();
                 }
               );
             },
-            undefined,
-            () => {
+            (progress) => {
+              console.log('MTL loading:', (progress.loaded / progress.total * 100).toFixed(0) + '%');
+            },
+            (error) => {
+              console.warn('MTL load failed, loading OBJ without materials:', error);
               // If MTL fails, load OBJ without materials
               const objLoader = new OBJLoader();
               objLoader.load(
                 modelConfig.url,
                 (object) => {
                   modelRoot.clear();
+                  
+                  // Center the object
+                  const box = new THREE.Box3().setFromObject(object);
+                  const center = box.getCenter(new THREE.Vector3());
+                  object.position.x = -center.x;
+                  object.position.z = -center.z;
+                  
                   object.traverse((child: InstanceType<typeof THREE.Object3D>) => {
                     const mesh = child as InstanceType<typeof THREE.Mesh>;
                     if (mesh.isMesh) {
                       mesh.castShadow = true;
                       mesh.receiveShadow = true;
-                      // Apply default material if no MTL
-                      if (!mesh.material) {
-                        mesh.material = new THREE.MeshStandardMaterial({
-                          color: 0xc1502e,
-                          metalness: 0.3,
-                          roughness: 0.6
-                        });
-                      }
+                      // Apply default material
+                      mesh.material = new THREE.MeshStandardMaterial({
+                        color: 0xf5f5dc,
+                        metalness: 0.2,
+                        roughness: 0.8
+                      });
                     }
                   });
                   object.scale.setScalar(1);
@@ -379,7 +395,8 @@ const ARViewer = () => {
                   modelRoot.add(object);
                 },
                 undefined,
-                () => {
+                (error) => {
+                  console.error('OBJ load error:', error);
                   createFallbackMonument();
                 }
               );
