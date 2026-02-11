@@ -1,8 +1,20 @@
 {
-  "rewrites": [
-    { 
-      "source": "/((?!models|assets|robots\\.txt|.*\\.(?:js|css|png|jpg|jpeg|gif|svg|ico|json|glb|gltf|stl|obj|mtl)).*)", 
-      "destination": "/index.html" 
+  "routes": [
+    {
+      "src": "/models/(.*)",
+      "dest": "/models/$1"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/(.*\\.(js|css|png|jpg|jpeg|gif|svg|ico|json|glb|gltf|stl|obj|mtl))",
+      "dest": "/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
