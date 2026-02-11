@@ -36,8 +36,8 @@ const fallbackMonuments: Record<string, { title: string; story: string }> = {
 };
 
 const modelConfigs: Record<string, ModelConfig> = {
-  golconda: { url: '/models/taj_mahal_3d_model.glb', scale: 0.6, y: -1.6 },
-  'golconda-fort': { url: '/models/taj_mahal_3d_model.glb', scale: 0.6, y: -1.6 },
+  golconda: { url: '/models/create_golconda_fort.glb', scale: 0.6, y: -1.6 },
+  'golconda-fort': { url: '/models/create_golconda_fort.glb', scale: 0.6, y: -1.6 },
   meenakshi: { url: '/models/meenakshi-temple.glb', scale: 1.0, y: -1.6 },
   'meenakshi-temple': { url: '/models/meenakshi-temple.glb', scale: 1.0, y: -1.6 },
   hampi: { url: '/models/hampi-ruins.glb', scale: 1.1, y: -1.6 },
