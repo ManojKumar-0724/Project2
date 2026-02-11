@@ -42,8 +42,8 @@ const modelConfigs: Record<string, ModelConfig> = {
   'meenakshi-temple': { url: '/models/meenakshi-temple.glb', scale: 2.0, y: -1.6 },
   hampi: { url: '/models/hampi-ruins.glb', scale: 2.2, y: -1.6 },
   'hampi-ruins': { url: '/models/hampi-ruins.glb', scale: 2.2, y: -1.6 },
-  'taj-mahal': { url: '/models/Tajmahal_model.obj', scale: 0.015, y: -1.6 },
-  tajmahal: { url: '/models/Tajmahal_model.obj', scale: 0.015, y: -1.6 },
+  'taj-mahal': { url: '/models/taj_mahal_3d_model.glb', scale: 1.5, y: -1.6 },
+  tajmahal: { url: '/models/taj_mahal_3d_model.glb', scale: 1.5, y: -1.6 },
 };
 
 const ARViewer = () => {
