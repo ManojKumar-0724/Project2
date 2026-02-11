@@ -40,8 +40,8 @@ const modelConfigs: Record<string, ModelConfig> = {
   'golconda-fort': { url: '/models/create_golconda_fort.glb', scale: 1.2, y: -1.6 },
   meenakshi: { url: '/models/meenakshi-temple.glb', scale: 2.0, y: -1.6 },
   'meenakshi-temple': { url: '/models/meenakshi-temple.glb', scale: 2.0, y: -1.6 },
-  hampi: { url: '/models/hampi-ruins.glb', scale: 2.2, y: -1.6 },
-  'hampi-ruins': { url: '/models/hampi-ruins.glb', scale: 2.2, y: -1.6 },
+  hampi: { url: '/models/stone_chariot_in_hampi.glb', scale: 2.2, y: -1.6 },
+  'hampi-ruins': { url: '/models/stone_chariot_in_hampi.glb', scale: 2.2, y: -1.6 },
   'taj-mahal': { url: '/models/3d_taj_mahal.glb', scale: 1.2, y: -1.6 },
   tajmahal: { url: '/models/3d_taj_mahal.glb', scale: 1.2, y: -1.6 },
 };
