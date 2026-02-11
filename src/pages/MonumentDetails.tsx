@@ -112,14 +112,22 @@ export default function MonumentDetails() {
         trackStoryView(stories[0].id, language);
       }
 
-      // First get AI-enhanced narration text
-      const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text: monument.description, language }
-      });
+      let textToSpeak = monument.description;
 
-      if (error) throw error;
+      // Try to get AI-enhanced narration text from edge function
+      try {
+        const { data, error } = await supabase.functions.invoke('text-to-speech', {
+          body: { text: monument.description, language }
+        });
 
-      const textToSpeak = data.text || monument.description;
+        if (!error && data?.text) {
+          textToSpeak = data.text;
+        }
+      } catch (functionError) {
+        // Edge function failed, fall back to monument description
+        console.warn('Edge function unavailable, using monument description:', functionError);
+      }
+
       setNarrationText(textToSpeak);
       setNarrationLanguage(language === 'en' ? 'English' : 'Kannada');
       setNarrationModal(true);
@@ -134,10 +142,25 @@ export default function MonumentDetails() {
         utterance.rate = 0.9;
         utterance.pitch = 1;
         
-        // Get available voices and select appropriate one
-        const voices = window.speechSynthesis.getVoices();
+        // Get available voices - with fallback if voices not loaded
+        let voices = window.speechSynthesis.getVoices();
+        
+        // If voices are not loaded, wait for them to load
+        if (voices.length === 0) {
+          await new Promise<void>((resolve) => {
+            const onVoicesChanged = () => {
+              voices = window.speechSynthesis.getVoices();
+              window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+              resolve();
+            };
+            window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
+            // Fallback timeout in case voiceschanged never fires
+            setTimeout(resolve, 1000);
+          });
+        }
+        
         const langCode = language === 'en' ? 'en' : 'kn';
-        const voice = voices.find(v => v.lang.startsWith(langCode)) || voices[0];
+        const voice = voices.find(v => v.lang.startsWith(langCode)) || voices.find(v => v.lang.includes('en')) || voices[0];
         if (voice) utterance.voice = voice;
         
         window.speechSynthesis.speak(utterance);

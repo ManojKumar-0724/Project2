@@ -50,7 +50,7 @@ export default function Quiz() {
       if (monumentError) throw monumentError;
 
       // Try to use stored quiz first (preferred)
-      const { data: template } = await supabase
+      const { data: template } = await (supabase as any)
         .from('quiz_templates')
         .select('id')
         .eq('monument_id', monumentId)
@@ -60,7 +60,7 @@ export default function Quiz() {
         .maybeSingle();
 
       if (template?.id) {
-        const { data: storedQuestions, error: qErr } = await supabase
+        const { data: storedQuestions, error: qErr } = await (supabase as any)
           .from('quiz_questions')
           .select('question, options, correct_answer, explanation, order_index')
           .eq('quiz_template_id', template.id)
@@ -187,6 +187,10 @@ export default function Quiz() {
               </Button>
               <Button variant="outline" onClick={() => navigate(-1)}>
                 Back to Monument
+              </Button>
+              <Button variant="secondary" onClick={() => navigate("/quizzes")}>
+                <Trophy className="mr-2 h-4 w-4" />
+                View Leaderboard
               </Button>
               <Button variant="secondary" onClick={() => navigate("/")}>
                 <Home className="mr-2 h-4 w-4" />

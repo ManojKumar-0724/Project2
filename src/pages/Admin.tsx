@@ -16,7 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Shield, Plus, Trash2, Edit, Users, Landmark, BookOpen, BarChart3, Check, XCircle } from "lucide-react";
+import { Loader2, Shield, Plus, Trash2, Edit, Users, Landmark, BookOpen, BarChart3, Check, XCircle, GraduationCap } from "lucide-react";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 
 interface Monument {
@@ -47,6 +47,31 @@ interface UserWithRole {
   email: string;
   created_at: string;
   roles: string[];
+}
+
+interface QuizTemplate {
+  id: string;
+  monument_id: string;
+  title: string;
+  description: string | null;
+  difficulty: string;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  monuments?: { title: string };
+}
+
+interface QuizQuestion {
+  id: string;
+  quiz_template_id: string;
+  question: string;
+  options: string[];
+  correct_answer: number;
+  explanation: string | null;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export default function Admin() {
@@ -83,6 +108,27 @@ export default function Admin() {
     status: "approved" as "approved" | "pending",
   });
 
+  // Quiz state
+  const [quizzes, setQuizzes] = useState<QuizTemplate[]>([]);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [quizDialogOpen, setQuizDialogOpen] = useState(false);
+  const [questionsDialogOpen, setQuestionsDialogOpen] = useState(false);
+  const [editingQuiz, setEditingQuiz] = useState<QuizTemplate | null>(null);
+  const [selectedQuizForQuestions, setSelectedQuizForQuestions] = useState<QuizTemplate | null>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizForm, setQuizForm] = useState({
+    title: "",
+    description: "",
+    difficulty: "medium",
+    monument_id: "",
+  });
+  const [newQuestion, setNewQuestion] = useState({
+    question: "",
+    options: ["", "", "", ""],
+    correct_answer: 0,
+    explanation: "",
+  });
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -101,7 +147,7 @@ export default function Admin() {
 
   const fetchData = async () => {
     setLoading(true);
-    await Promise.all([fetchMonuments(), fetchStories()]);
+    await Promise.all([fetchMonuments(), fetchStories(), fetchQuizzes()]);
     setLoading(false);
   };
 
@@ -123,9 +169,32 @@ export default function Admin() {
       .order("created_at", { ascending: false });
 
     if (!error && data) {
-      const storiesData = data as Story[];
+      const storiesData = data as unknown as Story[];
       setStories(storiesData);
       setPendingStories(storiesData.filter((story) => story.status === "pending"));
+    }
+  };
+
+  const fetchQuizzes = async () => {
+    const { data, error } = await (supabase as any)
+      .from("quiz_templates")
+      .select("*, monuments(title)")
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setQuizzes(data as QuizTemplate[]);
+    }
+  };
+
+  const fetchQuizQuestions = async (quizTemplateId: string) => {
+    const { data, error } = await (supabase as any)
+      .from("quiz_questions")
+      .select("*")
+      .eq("quiz_template_id", quizTemplateId)
+      .order("order_index", { ascending: true });
+
+    if (!error && data) {
+      setQuizQuestions(data as QuizQuestion[]);
     }
   };
 
@@ -222,7 +291,7 @@ export default function Admin() {
   ) => {
     setModerating(true);
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("stories")
         .update({
           status,
@@ -300,6 +369,119 @@ export default function Admin() {
       description: monument.description || "",
     });
     setMonumentDialogOpen(true);
+  };
+
+  const handleCreateQuiz = async () => {
+    if (!quizForm.title || !quizForm.monument_id) {
+      toast({
+        title: "Missing fields",
+        description: "Title and monument are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setQuizLoading(true);
+    try {
+      const { error } = await (supabase as any).from("quiz_templates").insert({
+        title: quizForm.title,
+        description: quizForm.description || null,
+        difficulty: quizForm.difficulty,
+        monument_id: quizForm.monument_id,
+        created_by: user?.id || null,
+        is_active: true,
+      });
+
+      if (error) throw error;
+
+      toast({ title: "Quiz created successfully" });
+      setQuizDialogOpen(false);
+      setQuizForm({ title: "", description: "", difficulty: "medium", monument_id: "" });
+      fetchQuizzes();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create quiz",
+        variant: "destructive",
+      });
+    } finally {
+      setQuizLoading(false);
+    }
+  };
+
+  const handleDeleteQuiz = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this quiz and all its questions?")) return;
+
+    try {
+      const { error } = await (supabase as any).from("quiz_templates").delete().eq("id", id);
+      if (error) throw error;
+
+      toast({ title: "Quiz deleted" });
+      fetchQuizzes();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete quiz",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddQuestion = async (quizId: string) => {
+    if (!newQuestion.question || newQuestion.options.some(o => !o.trim())) {
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all question and option fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setQuizLoading(true);
+    try {
+      const { error } = await (supabase as any).from("quiz_questions").insert({
+        quiz_template_id: quizId,
+        question: newQuestion.question,
+        options: newQuestion.options,
+        correct_answer: newQuestion.correct_answer,
+        explanation: newQuestion.explanation || null,
+        order_index: quizQuestions.length,
+      });
+
+      if (error) throw error;
+
+      toast({ title: "Question added successfully" });
+      setNewQuestion({ question: "", options: ["", "", "", ""], correct_answer: 0, explanation: "" });
+      fetchQuizQuestions(quizId);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add question",
+        variant: "destructive",
+      });
+    } finally {
+      setQuizLoading(false);
+    }
+  };
+
+  const handleDeleteQuestion = async (questionId: string) => {
+    if (!confirm("Are you sure you want to delete this question?")) return;
+
+    try {
+      const { error } = await (supabase as any).from("quiz_questions").delete().eq("id", questionId);
+      if (error) throw error;
+
+      toast({ title: "Question deleted" });
+      if (selectedQuizForQuestions) {
+        fetchQuizQuestions(selectedQuizForQuestions.id);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete question",
+        variant: "destructive",
+      });
+    }
   };
 
   const statusBadgeClass = (status: Story["status"]) => {
@@ -421,9 +603,10 @@ export default function Admin() {
         </div>
 
         <Tabs defaultValue="monuments" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="monuments">Monuments</TabsTrigger>
             <TabsTrigger value="stories">Stories</TabsTrigger>
+            <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
@@ -755,6 +938,152 @@ export default function Admin() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="quizzes">
+            <Card className="p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                  <GraduationCap className="h-5 w-5" /> Manage Quizzes
+                </h2>
+                <Dialog open={quizDialogOpen} onOpenChange={setQuizDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-heritage-terracotta hover:bg-heritage-terracotta/90">
+                      <Plus className="mr-2 h-4 w-4" /> Create Quiz
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Create New Quiz</DialogTitle>
+                      <DialogDescription>Create a quiz for a monument</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label>Monument *</Label>
+                        <Select
+                          value={quizForm.monument_id}
+                          onValueChange={(value) => setQuizForm({ ...quizForm, monument_id: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a monument" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {monuments.map((mon) => (
+                              <SelectItem key={mon.id} value={mon.id}>
+                                {mon.title}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Quiz Title *</Label>
+                        <Input
+                          value={quizForm.title}
+                          onChange={(e) => setQuizForm({ ...quizForm, title: e.target.value })}
+                          placeholder="e.g., History of Monument Quiz"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Description</Label>
+                        <Textarea
+                          value={quizForm.description}
+                          onChange={(e) => setQuizForm({ ...quizForm, description: e.target.value })}
+                          placeholder="Quiz description..."
+                          rows={3}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Difficulty Level</Label>
+                        <Select
+                          value={quizForm.difficulty}
+                          onValueChange={(value) => setQuizForm({ ...quizForm, difficulty: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="easy">Easy</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="hard">Hard</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setQuizDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleCreateQuiz} disabled={quizLoading}>
+                        {quizLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Create Quiz
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              {quizzes.length === 0 ? (
+                <div className="text-center py-12">
+                  <GraduationCap className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No quizzes created yet. Create one to get started.</p>
+                </div>
+              ) : (
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Monument</TableHead>
+                        <TableHead>Difficulty</TableHead>
+                        <TableHead>Questions</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {quizzes.map((quiz) => (
+                        <TableRow key={quiz.id}>
+                          <TableCell className="font-medium">{quiz.title}</TableCell>
+                          <TableCell>{quiz.monuments?.title || "Unknown"}</TableCell>
+                          <TableCell className="capitalize">{quiz.difficulty}</TableCell>
+                          <TableCell>
+                            {quizQuestions.filter(q => q.quiz_template_id === quiz.id).length}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${quiz.is_active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                              {quiz.is_active ? "Active" : "Inactive"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedQuizForQuestions(quiz);
+                                  fetchQuizQuestions(quiz.id);
+                                  setQuestionsDialogOpen(true);
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDeleteQuiz(quiz.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </Card>
+          </TabsContent>
+
           <TabsContent value="analytics">
             <Card className="p-6">
               <h2 className="text-xl font-semibold text-foreground mb-6 flex items-center gap-2">
@@ -765,6 +1094,124 @@ export default function Admin() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Quiz Questions Dialog */}
+        <Dialog open={questionsDialogOpen} onOpenChange={setQuestionsDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Manage Quiz Questions - {selectedQuizForQuestions?.title}</DialogTitle>
+              <DialogDescription>Add and manage questions for this quiz</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4">
+              {/* Add Question Form */}
+              <Card className="p-4 bg-muted">
+                <h3 className="font-semibold mb-4">Add New Question</h3>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Question *</Label>
+                    <Textarea
+                      value={newQuestion.question}
+                      onChange={(e) => setNewQuestion({ ...newQuestion, question: e.target.value })}
+                      placeholder="Enter the question..."
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label>Options *</Label>
+                    {newQuestion.options.map((option, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <Input
+                          value={option}
+                          onChange={(e) => {
+                            const newOptions = [...newQuestion.options];
+                            newOptions[index] = e.target.value;
+                            setNewQuestion({ ...newQuestion, options: newOptions });
+                          }}
+                          placeholder={`Option ${index + 1}`}
+                        />
+                        <input
+                          type="radio"
+                          name="correct"
+                          checked={newQuestion.correct_answer === index}
+                          onChange={() => setNewQuestion({ ...newQuestion, correct_answer: index })}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-xs text-muted-foreground">Correct</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Explanation</Label>
+                    <Textarea
+                      value={newQuestion.explanation}
+                      onChange={(e) => setNewQuestion({ ...newQuestion, explanation: e.target.value })}
+                      placeholder="Explain why this is the correct answer..."
+                      rows={2}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={() => selectedQuizForQuestions && handleAddQuestion(selectedQuizForQuestions.id)}
+                    disabled={quizLoading}
+                    className="w-full bg-heritage-terracotta hover:bg-heritage-terracotta/90"
+                  >
+                    {quizLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                    Add Question
+                  </Button>
+                </div>
+              </Card>
+
+              {/* Existing Questions List */}
+              <div className="space-y-3">
+                <h3 className="font-semibold">Questions ({quizQuestions.filter(q => q.quiz_template_id === selectedQuizForQuestions?.id).length})</h3>
+                {quizQuestions.filter(q => q.quiz_template_id === selectedQuizForQuestions?.id).length === 0 ? (
+                  <p className="text-muted-foreground text-sm">No questions added yet. Add one above.</p>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {quizQuestions
+                      .filter(q => q.quiz_template_id === selectedQuizForQuestions?.id)
+                      .map((question, idx) => (
+                        <Card key={question.id} className="p-4 bg-background border">
+                          <div className="flex justify-between items-start gap-2 mb-3">
+                            <h4 className="font-medium">Q{idx + 1}: {question.question}</h4>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteQuestion(question.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="space-y-2 text-sm">
+                            {question.options.map((option, optIdx) => (
+                              <div key={optIdx} className={`p-2 rounded ${optIdx === question.correct_answer ? "bg-green-100" : "bg-muted"}`}>
+                                {String.fromCharCode(65 + optIdx)}) {option}
+                                {optIdx === question.correct_answer && <span className="ml-2 text-xs font-semibold text-green-700">✓ Correct</span>}
+                              </div>
+                            ))}
+                          </div>
+                          {question.explanation && (
+                            <div className="mt-2 p-2 bg-blue-50 rounded text-sm text-blue-900">
+                              <strong>Explanation:</strong> {question.explanation}
+                            </div>
+                          )}
+                        </Card>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setQuestionsDialogOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
       <Footer />
     </div>

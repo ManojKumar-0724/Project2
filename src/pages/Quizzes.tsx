@@ -1,6 +1,7 @@
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { GameSection } from "@/components/GameSection";
+import { QuizLeaderboard } from "@/components/QuizLeaderboard";
 import { BackToHome } from "@/components/BackToHome";
 
 const Quizzes = () => {
@@ -12,6 +13,7 @@ const Quizzes = () => {
           <BackToHome />
         </div>
         <GameSection />
+        <QuizLeaderboard />
       </main>
       <Footer />
     </div>

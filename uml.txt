@@ -1,0 +1,1097 @@
+PSEUDO CODES FOR HERITAGE MONUMENTS WEB APPLICATION
+====================================================
+
+1. USER AUTHENTICATION MODULE
+==============================
+
+ALGORITHM UserSignUp
+INPUT: email, password, name
+OUTPUT: User account created and authenticated
+
+BEGIN
+  VALIDATE email format
+  VALIDATE password strength (min 6 characters)
+  
+  TRY
+    CALL Supabase.auth.signUp(email, password)
+    IF signup successful THEN
+      CREATE profile record with user metadata
+      SET role = 'user' in user_roles table
+      REDIRECT to home page
+    END IF
+  CATCH error
+    DISPLAY error message to user
+  END TRY
+END
+
+ALGORITHM UserSignIn
+INPUT: email, password
+OUTPUT: Authenticated session
+
+BEGIN
+  VALIDATE input fields not empty
+  
+  TRY
+    CALL Supabase.auth.signInWithPassword(email, password)
+    IF login successful THEN
+      FETCH user role from user_roles table
+      STORE session in local storage
+      REDIRECT to home page
+    END IF
+  CATCH error
+    DISPLAY "Invalid credentials" message
+  END TRY
+END
+
+ALGORITHM CheckUserRole
+OUTPUT: User role (admin/moderator/user)
+
+BEGIN
+  GET current user ID from session
+  IF user not authenticated THEN
+    RETURN null
+  END IF
+  
+  QUERY user_roles WHERE user_id = current_user_id
+  IF role exists THEN
+    RETURN role
+  ELSE
+    RETURN 'user' (default)
+  END IF
+END
+
+
+2. MONUMENT BROWSING AND SEARCH MODULE
+=======================================
+
+ALGORITHM BrowseMonuments
+INPUT: search_query (optional), filters (optional)
+OUTPUT: List of monuments
+
+BEGIN
+  INITIALIZE monuments_list = []
+  
+  IF search_query is empty THEN
+    QUERY all monuments FROM database
+      ORDER BY name ASC
+  ELSE
+    QUERY monuments WHERE 
+      name CONTAINS search_query OR
+      location CONTAINS search_query OR
+      description CONTAINS search_query
+  END IF
+  
+  IF filters applied THEN
+    FILTER monuments by location/era/type
+  END IF
+  
+  FOR each monument IN monuments_list
+    FETCH monument image from storage
+    CALCULATE average rating from ratings table
+    CHECK if monument is in user favorites
+  END FOR
+  
+  RETURN monuments_list
+END
+
+ALGORITHM GetMonumentDetails
+INPUT: monument_id
+OUTPUT: Complete monument information
+
+BEGIN
+  QUERY monument WHERE id = monument_id
+  IF monument not found THEN
+    DISPLAY "Monument not found"
+    RETURN null
+  END IF
+  
+  FETCH related stories from stories table
+  FETCH quiz templates for monument
+  CALCULATE total views from monument_views table
+  GET user rating for this monument
+  
+  INCREMENT view count
+  INSERT into monument_views table
+  
+  RETURN monument with all related data
+END
+
+
+3. STORY MANAGEMENT MODULE
+===========================
+
+ALGORITHM DisplayStories
+INPUT: monument_id, story_length (short/medium/detailed)
+OUTPUT: Story content with audio narration
+
+BEGIN
+  QUERY stories WHERE monument_id = monument_id 
+    AND status = 'approved'
+  
+  FOR each story IN stories_list
+    IF story_length = 'short' THEN
+      content = TRUNCATE(story.content, 75 words)
+    ELSE IF story_length = 'medium' THEN
+      content = TRUNCATE(story.content, 150 words)
+    ELSE
+      content = story.content (full)
+    END IF
+    
+    DISPLAY content with audio button
+  END FOR
+END
+
+ALGORITHM GenerateAudioNarration
+INPUT: text, language (English/Kannada)
+OUTPUT: Audio playback
+
+BEGIN
+  INITIALIZE speech_synthesis = SpeechSynthesis API
+  
+  IF language = 'English' THEN
+    SET voice_code = 'en-US'
+  ELSE IF language = 'Kannada' THEN
+    SET voice_code = 'kn-IN'
+  END IF
+  
+  GET available voices for language
+  IF voices available THEN
+    CREATE utterance with text and voice
+    SET speech rate and pitch
+    PLAY audio
+  ELSE
+    DISPLAY "Voice not available" error
+  END IF
+END
+
+ALGORITHM ContributeStory
+INPUT: monument_id, title, content, language
+OUTPUT: Story submitted for moderation
+
+BEGIN
+  GET current user from session
+  IF user not authenticated THEN
+    REDIRECT to login page
+  END IF
+  
+  VALIDATE title not empty
+  VALIDATE content length > 100 characters
+  
+  INSERT INTO stories TABLE
+    monument_id = monument_id
+    title = title
+    content = content
+    author_id = current_user_id
+    language = language
+    status = 'pending'
+    created_at = current_timestamp
+  
+  DISPLAY "Story submitted for review" message
+  REDIRECT to stories page
+END
+
+
+4. QUIZ SYSTEM MODULE
+======================
+
+ALGORITHM LoadQuiz
+INPUT: monument_id
+OUTPUT: Quiz questions with options
+
+BEGIN
+  QUERY quiz_templates WHERE monument_id = monument_id
+    AND is_active = true
+  
+  IF quiz_template exists THEN
+    QUERY quiz_questions WHERE quiz_template_id = template_id
+      ORDER BY order_index
+    
+    IF questions exist THEN
+      RETURN stored questions
+    END IF
+  END IF
+  
+  // Fallback to AI generation
+  CALL GenerateQuizWithAI(monument_id)
+  RETURN generated questions
+END
+
+ALGORITHM ProcessQuizAnswers
+INPUT: quiz_id, user_answers[]
+OUTPUT: Score and feedback
+
+BEGIN
+  INITIALIZE correct_count = 0
+  INITIALIZE total_questions = length(user_answers)
+  
+  FOR each answer IN user_answers
+    GET correct_answer from quiz_questions
+    IF answer = correct_answer THEN
+      correct_count = correct_count + 1
+    END IF
+  END FOR
+  
+  CALCULATE score = (correct_count / total_questions) * 100
+  
+  INSERT INTO quiz_completions TABLE
+    user_id = current_user_id
+    quiz_template_id = quiz_id
+    score = score
+    completed_at = current_timestamp
+  
+  RETURN score with explanations
+END
+
+ALGORITHM GenerateQuizWithAI
+INPUT: monument_id
+OUTPUT: AI-generated quiz questions
+
+BEGIN
+  GET monument details from database
+  
+  CREATE prompt = "Generate 5 multiple-choice questions about " + monument.name
+  
+  CALL Edge Function generate-quiz
+    WITH monument context
+  
+  IF generation successful THEN
+    PARSE JSON response
+    VALIDATE question format
+    RETURN questions array
+  ELSE
+    THROW "Quiz generation failed" error
+  END IF
+END
+
+
+5. ADMIN PANEL MODULE
+======================
+
+ALGORITHM AccessAdminPanel
+OUTPUT: Admin dashboard or access denied
+
+BEGIN
+  GET current user from session
+  IF user not authenticated THEN
+    DISPLAY "Please sign in" message
+    RETURN
+  END IF
+  
+  GET user_role = CheckUserRole()
+  IF user_role != 'admin' AND user_role != 'moderator' THEN
+    DISPLAY "Access denied - Admin privileges required"
+    RETURN
+  END IF
+  
+  LOAD admin dashboard components
+END
+
+ALGORITHM ModerateStories
+OUTPUT: List of pending stories
+
+BEGIN
+  QUERY stories WHERE status = 'pending'
+    ORDER BY created_at DESC
+  
+  FOR each story IN pending_stories
+    DISPLAY story details
+    SHOW approve/reject buttons
+  END FOR
+END
+
+ALGORITHM ApproveStory
+INPUT: story_id
+OUTPUT: Story approved and published
+
+BEGIN
+  VALIDATE user has admin/moderator role
+  
+  UPDATE stories TABLE
+    SET status = 'approved'
+    WHERE id = story_id
+  
+  // Optional: Send notification to author
+  NOTIFY author "Your story has been approved"
+  
+  DISPLAY "Story approved successfully"
+  REFRESH pending stories list
+END
+
+ALGORITHM RejectStory
+INPUT: story_id, rejection_reason
+OUTPUT: Story rejected with feedback
+
+BEGIN
+  VALIDATE user has admin/moderator role
+  VALIDATE rejection_reason not empty
+  
+  UPDATE stories TABLE
+    SET status = 'rejected'
+    SET rejection_reason = rejection_reason
+    WHERE id = story_id
+  
+  // Optional: Send notification to author
+  NOTIFY author "Story rejected: " + rejection_reason
+  
+  DISPLAY "Story rejected"
+  REFRESH pending stories list
+END
+
+ALGORITHM CreateStoryAsAdmin
+INPUT: monument_id, title, content, author_name, language
+OUTPUT: Story created and published
+
+BEGIN
+  VALIDATE user has admin role
+  VALIDATE all required fields
+  
+  INSERT INTO stories TABLE
+    monument_id = monument_id
+    title = title
+    content = content
+    author = author_name
+    language = language
+    status = 'approved'  // Auto-approve admin stories
+    created_by = current_user_id
+    created_at = current_timestamp
+  
+  DISPLAY "Story created successfully"
+END
+
+
+6. FAVORITES MANAGEMENT MODULE
+===============================
+
+ALGORITHM ToggleFavorite
+INPUT: monument_id
+OUTPUT: Favorite added or removed
+
+BEGIN
+  GET current_user_id from session
+  
+  CHECK IF favorite exists WHERE
+    user_id = current_user_id AND
+    monument_id = monument_id
+  
+  IF favorite exists THEN
+    DELETE FROM favorites
+    DISPLAY "Removed from favorites"
+  ELSE
+    INSERT INTO favorites (user_id, monument_id, created_at)
+    DISPLAY "Added to favorites"
+  END IF
+  
+  UPDATE UI to reflect change
+END
+
+ALGORITHM GetUserFavorites
+OUTPUT: List of favorite monuments
+
+BEGIN
+  GET current_user_id from session
+  
+  QUERY favorites JOIN monuments
+    WHERE user_id = current_user_id
+    ORDER BY created_at DESC
+  
+  FOR each favorite IN favorites_list
+    FETCH monument details
+    FETCH monument image
+    CALCULATE rating
+  END FOR
+  
+  RETURN favorites_list
+END
+
+
+7. RATING SYSTEM MODULE
+========================
+
+ALGORITHM RateMonument
+INPUT: monument_id, rating_value (1-5)
+OUTPUT: Rating saved
+
+BEGIN
+  GET current_user_id from session
+  VALIDATE rating_value between 1 and 5
+  
+  CHECK IF existing rating WHERE
+    user_id = current_user_id AND
+    monument_id = monument_id
+  
+  IF existing rating THEN
+    UPDATE ratings SET rating = rating_value
+  ELSE
+    INSERT INTO ratings (user_id, monument_id, rating, created_at)
+  END IF
+  
+  CALCULATE new average rating for monument
+  DISPLAY "Thank you for rating"
+END
+
+ALGORITHM GetAverageRating
+INPUT: monument_id
+OUTPUT: Average rating and count
+
+BEGIN
+  QUERY ratings WHERE monument_id = monument_id
+  
+  IF ratings exist THEN
+    CALCULATE average = SUM(rating) / COUNT(ratings)
+    CALCULATE total_ratings = COUNT(ratings)
+    RETURN (average, total_ratings)
+  ELSE
+    RETURN (0, 0)
+  END IF
+END
+
+
+8. AR VIEWER MODULE
+====================
+
+ALGORITHM InitializeARViewer
+INPUT: monument_id
+OUTPUT: AR scene loaded
+
+BEGIN
+  GET monument details from database
+  GET 3D model URL from storage
+  
+  INITIALIZE A-Frame scene
+  CREATE camera entity
+  CREATE lighting entities
+  
+  LOAD 3D model (GLTF format)
+    WITH position = (0, 0, -5)
+    WITH scale = (1, 1, 1)
+    WITH rotation enabled
+  
+  ADD environment lighting
+  ADD orbit controls for interaction
+  
+  DISPLAY AR scene
+  SHOW instructions "Drag to rotate, pinch to zoom"
+END
+
+ALGORITHM RotateModel
+INPUT: touch_delta_x, touch_delta_y
+OUTPUT: Model rotated
+
+BEGIN
+  GET current model rotation
+  
+  CALCULATE new_rotation_y = current_rotation.y + touch_delta_x * sensitivity
+  CALCULATE new_rotation_x = current_rotation.x + touch_delta_y * sensitivity
+  
+  CLAMP rotation_x between -90 and 90 degrees
+  
+  UPDATE model rotation
+  RENDER scene
+END
+
+
+9. ANALYTICS MODULE
+====================
+
+ALGORITHM TrackMonumentView
+INPUT: monument_id
+OUTPUT: View recorded
+
+BEGIN
+  GET current_user_id from session (if authenticated)
+  GET session_id from browser
+  
+  INSERT INTO monument_views TABLE
+    monument_id = monument_id
+    user_id = current_user_id (nullable)
+    session_id = session_id
+    viewed_at = current_timestamp
+    
+  UPDATE monuments SET view_count = view_count + 1
+    WHERE id = monument_id
+END
+
+ALGORITHM GetAnalytics
+OUTPUT: Dashboard analytics data
+
+BEGIN
+  VALIDATE user has admin role
+  
+  CALCULATE total_monuments = COUNT(monuments)
+  CALCULATE total_stories = COUNT(stories WHERE status = 'approved')
+  CALCULATE total_users = COUNT(profiles)
+  CALCULATE total_quiz_completions = COUNT(quiz_completions)
+  
+  GET top_rated_monuments = QUERY monuments
+    ORDER BY average_rating DESC
+    LIMIT 5
+  
+  GET most_viewed_monuments = QUERY monuments
+    ORDER BY view_count DESC
+    LIMIT 5
+  
+  GET recent_activities = QUERY monument_views
+    ORDER BY viewed_at DESC
+    LIMIT 10
+  
+  RETURN analytics_dashboard_data
+END
+
+
+10. SEARCH AND FILTER MODULE
+=============================
+
+ALGORITHM SearchMonuments
+INPUT: search_term, filters
+OUTPUT: Filtered monuments list
+
+BEGIN
+  INITIALIZE query = "SELECT * FROM monuments WHERE 1=1"
+  
+  IF search_term not empty THEN
+    query += " AND (name ILIKE '%' || search_term || '%'"
+    query += " OR location ILIKE '%' || search_term || '%'"
+    query += " OR description ILIKE '%' || search_term || '%')"
+  END IF
+  
+  IF filters.location specified THEN
+    query += " AND location = " + filters.location
+  END IF
+  
+  IF filters.era specified THEN
+    query += " AND era = " + filters.era
+  END IF
+  
+  IF filters.min_rating specified THEN
+    query += " AND average_rating >= " + filters.min_rating
+  END IF
+  
+  EXECUTE query
+  RETURN results
+END
+
+
+================================================================================
+TEST CASES FOR HERITAGE MONUMENTS WEB APPLICATION
+================================================================================
+
+
+1. USER AUTHENTICATION MODULE - TEST CASES
+===========================================
+
+┌──────────────┬──────────────────────────────────────┬──────────────────────────────────────┬──────────────────┬──────────┐
+│ Test Case ID │ Step Details                         │ Expected Results                     │ Actual Results   │ Status   │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AUTH_001     │ Navigate to sign up page             │ Sign up form displayed with email,   │                  │          │
+│              │ Enter valid email, password, name    │ password, name fields. User account  │                  │          │
+│              │ Click Sign Up button                 │ created. Redirect to home page.      │                  │          │
+│              │                                      │ Success message shown.               │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AUTH_002     │ Navigate to sign up page             │ Error message: "Invalid email        │                  │          │
+│              │ Enter invalid email format           │ format". Account not created.        │                  │          │
+│              │ Click Sign Up button                 │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AUTH_003     │ Navigate to sign up page             │ Error message: "Password must be     │                  │          │
+│              │ Enter password < 6 characters        │ at least 6 characters". Account      │                  │          │
+│              │ Click Sign Up button                 │ not created.                         │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AUTH_004     │ Navigate to sign up page             │ Error message: "Email already        │                  │          │
+│              │ Enter existing user email            │ registered". Account not created.    │                  │          │
+│              │ Click Sign Up button                 │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AUTH_005     │ Navigate to sign in page             │ User authenticated. Session created. │                  │          │
+│              │ Enter valid credentials              │ Redirect to home page. User role     │                  │          │
+│              │ Click Sign In button                 │ fetched from database.               │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AUTH_006     │ Navigate to sign in page             │ Error message: "Invalid credentials".│                  │          │
+│              │ Enter incorrect password             │ User not authenticated.              │                  │          │
+│              │ Click Sign In button                 │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AUTH_007     │ Sign in as user                      │ User role returned as 'user'.        │                  │          │
+│              │ System checks user role              │ Basic access granted.                │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AUTH_008     │ Sign in as admin                     │ User role returned as 'admin'.       │                  │          │
+│              │ System checks user role              │ Admin access granted.                │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AUTH_009     │ User signed in                       │ Session cleared. User logged out.    │                  │          │
+│              │ Click Sign Out button                │ Redirect to home page.               │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AUTH_010     │ Access protected page without login │ Redirect to login page. Error        │                  │          │
+│              │                                      │ message shown.                       │                  │          │
+└──────────────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┴──────────┘
+
+
+2. MONUMENT BROWSING AND SEARCH MODULE - TEST CASES
+====================================================
+
+┌──────────────┬──────────────────────────────────────┬──────────────────────────────────────┬──────────────────┬──────────┐
+│ Test Case ID │ Step Details                         │ Expected Results                     │ Actual Results   │ Status   │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ MON_001      │ Navigate to monuments page           │ All monuments displayed in grid      │                  │          │
+│              │ No search query or filters applied   │ layout. Sorted by name ascending.    │                  │          │
+│              │                                      │ Images, names, locations visible.    │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ MON_002      │ Navigate to monuments page           │ Monuments matching "Mysore" shown    │                  │          │
+│              │ Enter "Mysore" in search box         │ in name, location, or description.   │                  │          │
+│              │ Click search                         │ Other monuments filtered out.        │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ MON_003      │ Navigate to monuments page           │ Message "No monuments found"         │                  │          │
+│              │ Enter non-existent monument name     │ displayed. Empty results list.       │                  │          │
+│              │ Click search                         │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ MON_004      │ Navigate to monuments page           │ Only monuments from Mysore location  │                  │          │
+│              │ Select location filter "Mysore"      │ displayed. Other monuments hidden.   │                  │          │
+│              │ Apply filter                         │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ MON_005      │ Navigate to monuments page           │ Only monuments from Vijayanagara     │                  │          │
+│              │ Select era filter "Vijayanagara"     │ era displayed. Filter applied.       │                  │          │
+│              │ Apply filter                         │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ MON_006      │ Browse monuments list                │ Monument details page displayed.     │                  │          │
+│              │ Click on monument card               │ Full information, images, stories,   │                  │          │
+│              │                                      │ quiz options shown.                  │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ MON_007      │ Open monument details page           │ Related stories displayed. Quiz      │                  │          │
+│              │ View monument information            │ templates shown. Average rating      │                  │          │
+│              │                                      │ calculated and displayed.            │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ MON_008      │ Open monument details page           │ View count incremented by 1.         │                  │          │
+│              │ System tracks page view              │ Record inserted in monument_views.   │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ MON_009      │ Navigate to monument details         │ Error page "Monument not found"      │                  │          │
+│              │ Use invalid monument ID in URL       │ displayed. 404 status.               │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ MON_010      │ Browse monuments page                │ All monument images load correctly.  │                  │          │
+│              │ Verify image loading                 │ No broken images. Lazy loading       │                  │          │
+│              │                                      │ works properly.                      │                  │          │
+└──────────────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┴──────────┘
+
+
+3. STORY MANAGEMENT MODULE - TEST CASES
+========================================
+
+┌──────────────┬──────────────────────────────────────┬──────────────────────────────────────┬──────────────────┬──────────┐
+│ Test Case ID │ Step Details                         │ Expected Results                     │ Actual Results   │ Status   │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_001    │ Navigate to Stories page             │ Monument dropdown displayed. Stories │                  │          │
+│              │ Select monument from dropdown        │ for selected monument loaded. Only   │                  │          │
+│              │ View stories                         │ approved stories shown.              │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_002    │ Open story on Stories page           │ Story truncated to ~75 words.        │                  │          │
+│              │ Select "Short" tab                   │ Audio button available.              │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_003    │ Open story on Stories page           │ Story truncated to ~150 words.       │                  │          │
+│              │ Select "Medium" tab                  │ More content than short version.     │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_004    │ Open story on Stories page           │ Full story content displayed. No     │                  │          │
+│              │ Select "Detailed" tab                │ truncation. Complete text shown.     │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_005    │ View story in English                │ Audio narration plays in English     │                  │          │
+│              │ Click audio button for English       │ (en-US). Text-to-speech synthesized. │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_006    │ View story in Kannada                │ Audio narration plays in Kannada     │                  │          │
+│              │ Click audio button for Kannada       │ (kn-IN). Text-to-speech synthesized. │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_007    │ Navigate to Contribute page          │ Story form displayed. Monument       │                  │          │
+│              │ User logged in                       │ dropdown, title, content, language   │                  │          │
+│              │ Fill story form with valid data      │ fields available. Form submitted.    │                  │          │
+│              │ Submit story                         │ Status set to "pending".             │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_008    │ Navigate to Contribute page          │ Redirect to login page. Error        │                  │          │
+│              │ User not logged in                   │ message "Please sign in to           │                  │          │
+│              │ Try to access form                   │ contribute".                         │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_009    │ Fill story contribution form         │ Error message "Title is required".   │                  │          │
+│              │ Leave title field empty              │ Form not submitted.                  │                  │          │
+│              │ Try to submit                        │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_010    │ Fill story contribution form         │ Error message "Content must be at    │                  │          │
+│              │ Enter content < 100 characters       │ least 100 characters". Form not      │                  │          │
+│              │ Try to submit                        │ submitted.                           │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_011    │ Submit valid story                   │ Success message "Story submitted for │                  │          │
+│              │ Check submission status              │ review" shown. Story appears in      │                  │          │
+│              │                                      │ admin pending queue.                 │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ STORY_012    │ Click audio button                   │ Error message "Voice not available"  │                  │          │
+│              │ Browser doesn't support TTS          │ displayed. Audio doesn't play.       │                  │          │
+└──────────────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┴──────────┘
+
+
+4. QUIZ SYSTEM MODULE - TEST CASES
+===================================
+
+┌──────────────┬──────────────────────────────────────┬──────────────────────────────────────┬──────────────────┬──────────┐
+│ Test Case ID │ Step Details                         │ Expected Results                     │ Actual Results   │ Status   │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_001     │ Navigate to monument details         │ Quiz button/link visible. Click      │                  │          │
+│              │ Click "Take Quiz" button             │ loads quiz page with questions.      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_002     │ Load quiz for monument               │ Stored quiz questions loaded from    │                  │          │
+│              │ System checks for stored quiz        │ database. Questions displayed with   │                  │          │
+│              │                                      │ multiple choice options.             │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_003     │ Load quiz for monument               │ System calls AI edge function.       │                  │          │
+│              │ No stored quiz available             │ AI-generated questions displayed.    │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_004     │ Quiz page loaded with 5 questions    │ Questions displayed one by one or    │                  │          │
+│              │ Answer all questions                 │ all at once. Options selectable.     │                  │          │
+│              │ Click Submit                         │ Answers recorded.                    │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_005     │ Complete quiz with all correct       │ Score calculated as 100%.            │                  │          │
+│              │ Submit answers                       │ Success message shown. Score saved   │                  │          │
+│              │                                      │ to quiz_completions table.           │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_006     │ Complete quiz with 3/5 correct       │ Score calculated as 60%.             │                  │          │
+│              │ Submit answers                       │ Explanations for wrong answers       │                  │          │
+│              │                                      │ shown. Score saved.                  │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_007     │ Start quiz                           │ Error message "Please answer all     │                  │          │
+│              │ Leave some questions unanswered      │ questions". Quiz not submitted.      │                  │          │
+│              │ Try to submit                        │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_008     │ Submit quiz answers                  │ Explanations displayed for each      │                  │          │
+│              │ View results page                    │ question. Correct answers            │                  │          │
+│              │                                      │ highlighted. User score shown.       │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_009     │ Complete quiz as logged in user      │ Quiz completion record created.      │                  │          │
+│              │ System saves completion data         │ User ID, quiz ID, score, timestamp   │                  │          │
+│              │                                      │ saved to database.                   │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_010     │ Load quiz with invalid monument ID   │ Error page displayed. Message "Quiz  │                  │          │
+│              │                                      │ not found" or "Failed to load quiz". │                  │          │
+│              │                                      │ Retry/Back buttons available.        │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_011     │ Edge function fails to generate quiz │ Error message displayed. Graceful    │                  │          │
+│              │ System handles error                 │ fallback shown. User can go back.    │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ QUIZ_012     │ Complete same quiz multiple times    │ Each completion recorded separately. │                  │          │
+│              │ Check quiz history                   │ All scores and timestamps saved.     │                  │          │
+└──────────────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┴──────────┘
+
+
+5. ADMIN PANEL MODULE - TEST CASES
+===================================
+
+┌──────────────┬──────────────────────────────────────┬──────────────────────────────────────┬──────────────────┬──────────┐
+│ Test Case ID │ Step Details                         │ Expected Results                     │ Actual Results   │ Status   │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_001    │ Sign in as admin user                │ Admin dashboard loads. All tabs      │                  │          │
+│              │ Navigate to /admin                   │ visible (Overview, Stories, Users,   │                  │          │
+│              │                                      │ Analytics). Full access granted.     │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_002    │ Sign in as regular user              │ Access denied message shown.         │                  │          │
+│              │ Navigate to /admin                   │ "Admin privileges required". No      │                  │          │
+│              │                                      │ dashboard access.                    │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_003    │ Not signed in                        │ "Please sign in" message displayed.  │                  │          │
+│              │ Try to access /admin                 │ Login prompt shown. No access.       │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_004    │ Admin logged in                      │ All pending stories displayed in     │                  │          │
+│              │ Navigate to Stories tab              │ list. Approve/Reject buttons         │                  │          │
+│              │ View pending stories                 │ visible. Story details shown.        │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_005    │ View pending story                   │ Story status updated to "approved".  │                  │          │
+│              │ Click Approve button                 │ Story appears in public Stories tab. │                  │          │
+│              │                                      │ Success message shown.               │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_006    │ View pending story                   │ Rejection dialog opens. Reason field │                  │          │
+│              │ Click Reject button                  │ required. Story status updated to    │                  │          │
+│              │ Enter rejection reason               │ "rejected". Reason saved.            │                  │          │
+│              │ Confirm rejection                    │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_007    │ View pending story                   │ Error message "Rejection reason is   │                  │          │
+│              │ Click Reject button                  │ required". Story not rejected.       │                  │          │
+│              │ Leave reason field empty             │                                      │                  │          │
+│              │ Try to confirm                       │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_008    │ Open admin panel                     │ Create story dialog opens. Monument  │                  │          │
+│              │ Click "Create Story" button          │ dropdown, title, content, author,    │                  │          │
+│              │ Fill all required fields             │ language fields available. Story     │                  │          │
+│              │ Submit form                          │ created with "approved" status.      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_009    │ Open create story dialog             │ Error messages for empty fields.     │                  │          │
+│              │ Leave required fields empty          │ Form not submitted. Validation       │                  │          │
+│              │ Try to submit                        │ errors shown.                        │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_010    │ Navigate to all stories view         │ All stories shown with status badges │                  │          │
+│              │ View stories list                    │ (approved/pending/rejected).         │                  │          │
+│              │                                      │ Sortable and filterable.             │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_011    │ Sign in as moderator user            │ Moderator dashboard loads. Limited   │                  │          │
+│              │ Navigate to /admin                   │ access. Can moderate stories but     │                  │          │
+│              │                                      │ not access all admin features.       │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ADMIN_012    │ Admin approves story                 │ Optional: Notification sent to       │                  │          │
+│              │ System sends notification            │ author. Email/in-app notification    │                  │          │
+│              │                                      │ with approval message.               │                  │          │
+└──────────────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┴──────────┘
+
+
+6. FAVORITES MANAGEMENT MODULE - TEST CASES
+============================================
+
+┌──────────────┬──────────────────────────────────────┬──────────────────────────────────────┬──────────────────┬──────────┐
+│ Test Case ID │ Step Details                         │ Expected Results                     │ Actual Results   │ Status   │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ FAV_001      │ User logged in                       │ Heart icon changes to filled.        │                  │          │
+│              │ View monument card                   │ Monument added to favorites table.   │                  │          │
+│              │ Click heart/favorite icon            │ Success message shown.               │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ FAV_002      │ Monument already in favorites        │ Heart icon changes to outline.       │                  │          │
+│              │ Click heart/favorite icon again      │ Monument removed from favorites.     │                  │          │
+│              │                                      │ "Removed from favorites" message.    │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ FAV_003      │ User not logged in                   │ Prompt to sign in. Favorite not      │                  │          │
+│              │ Try to add monument to favorites     │ added. Redirect to login page.       │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ FAV_004      │ User logged in                       │ Favorites page displays all user's   │                  │          │
+│              │ Navigate to Favorites page           │ favorite monuments. Monument cards   │                  │          │
+│              │                                      │ with images, names, ratings shown.   │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ FAV_005      │ User with no favorites               │ Empty state message "No favorites    │                  │          │
+│              │ Navigate to Favorites page           │ yet". Link to browse monuments.      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ FAV_006      │ On Favorites page                    │ Monument removed from favorites      │                  │          │
+│              │ Click remove/unfavorite icon         │ list. UI updates immediately.        │                  │          │
+│              │                                      │ Success message displayed.           │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ FAV_007      │ Add monument to favorites            │ Favorite persists across sessions.   │                  │          │
+│              │ Sign out and sign in again           │ Still appears in favorites list.     │                  │          │
+│              │ Check Favorites page                 │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ FAV_008      │ View monument card                   │ Heart icon shows filled state.       │                  │          │
+│              │ Monument already in favorites        │ Visual indicator of favorite status. │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ FAV_009      │ Favorites page loaded                │ Monuments sorted by date added       │                  │          │
+│              │ View favorites list                  │ (newest first). Consistent ordering. │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ FAV_010      │ Add multiple monuments to favorites  │ All monuments appear in favorites    │                  │          │
+│              │ View Favorites page                  │ list. No duplicates. Accurate count. │                  │          │
+└──────────────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┴──────────┘
+
+
+7. RATING SYSTEM MODULE - TEST CASES
+=====================================
+
+┌──────────────┬──────────────────────────────────────┬──────────────────────────────────────┬──────────────────┬──────────┐
+│ Test Case ID │ Step Details                         │ Expected Results                     │ Actual Results   │ Status   │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ RATE_001     │ User logged in                       │ Rating saved to database. Stars      │                  │          │
+│              │ View monument details page           │ highlight up to selected rating.     │                  │          │
+│              │ Click on 4-star rating               │ "Thank you for rating" message.      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ RATE_002     │ User already rated monument          │ Rating updated to new value. Old     │                  │          │
+│              │ Change rating from 4 to 5 stars      │ rating replaced. Database updated.   │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ RATE_003     │ User not logged in                   │ Prompt to sign in. Rating not saved. │                  │          │
+│              │ Try to rate monument                 │ Redirect to login page.              │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ RATE_004     │ Monument has multiple ratings        │ Average calculated correctly.        │                  │          │
+│              │ System calculates average rating     │ Example: (5+4+3)/3 = 4.0 stars      │                  │          │
+│              │                                      │ displayed on monument card.          │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ RATE_005     │ Monument has no ratings yet          │ Rating displayed as 0 or "Not rated".│                  │          │
+│              │ View monument rating                 │ Rating count shows 0.                │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ RATE_006     │ Submit rating outside valid range    │ Validation error. Rating not saved.  │                  │          │
+│              │ Try to rate with value < 1 or > 5    │ Error message displayed.             │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ RATE_007     │ User previously rated monument       │ Stars pre-filled with existing       │                  │          │
+│              │ Return to monument details page      │ rating. User can see their vote.     │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ RATE_008     │ Monument card on browse page         │ Average rating and total count       │                  │          │
+│              │ View rating display                  │ displayed. Format: "4.5 ★ (23)"      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ RATE_009     │ User submits rating                  │ Average rating recalculated.         │                  │          │
+│              │ System updates monument average      │ Monument card UI updates. New        │                  │          │
+│              │                                      │ average reflected immediately.       │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ RATE_010     │ Browse monuments                     │ Monuments sorted by rating           │                  │          │
+│              │ Apply "Sort by highest rated" filter │ (highest first). Top-rated shown     │                  │          │
+│              │                                      │ at top of list.                      │                  │          │
+└──────────────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┴──────────┘
+
+
+8. AR VIEWER MODULE - TEST CASES
+=================================
+
+┌──────────────┬──────────────────────────────────────┬──────────────────────────────────────┬──────────────────┬──────────┐
+│ Test Case ID │ Step Details                         │ Expected Results                     │ Actual Results   │ Status   │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AR_001       │ Navigate to monument details         │ AR Viewer page loads. 3D model       │                  │          │
+│              │ Click "View in AR" button            │ displayed. A-Frame scene initialized.│                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AR_002       │ AR Viewer loaded                     │ 3D model loads successfully. GLTF    │                  │          │
+│              │ System loads 3D model                │ file fetched from storage. Model     │                  │          │
+│              │                                      │ rendered in scene.                   │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AR_003       │ 3D model loaded in AR viewer         │ Model rotates based on drag motion.  │                  │          │
+│              │ Drag/swipe on screen                 │ Smooth rotation animation. Touch     │                  │          │
+│              │                                      │ controls responsive.                 │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AR_004       │ 3D model loaded in AR viewer         │ Model scales up/down. Pinch gesture  │                  │          │
+│              │ Pinch gesture (zoom in/out)          │ recognized. Zoom limits applied.     │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AR_005       │ AR viewer loaded                     │ Environment lighting applied. Model  │                  │          │
+│              │ System applies lighting              │ properly lit. Shadows rendered.      │                  │          │
+│              │                                      │ Realistic visualization.             │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AR_006       │ AR viewer loaded                     │ Instructions displayed: "Drag to     │                  │          │
+│              │ View instructions overlay            │ rotate, pinch to zoom". Clear        │                  │          │
+│              │                                      │ guidance for user interaction.       │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AR_007       │ Navigate to AR viewer                │ Error message "3D model not          │                  │          │
+│              │ 3D model URL missing or invalid      │ available". Fallback UI shown.       │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AR_008       │ Load AR viewer on mobile device      │ Touch controls work properly.        │                  │          │
+│              │ Test touch interactions              │ Responsive to touch gestures.        │                  │          │
+│              │                                      │ Performance acceptable.              │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AR_009       │ AR viewer loaded                     │ Rotation clamped between -90° and    │                  │          │
+│              │ Attempt extreme rotation angles      │ +90° on X-axis. Model doesn't flip   │                  │          │
+│              │                                      │ upside down.                         │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ AR_010       │ AR viewer page loaded                │ Back button navigates to previous    │                  │          │
+│              │ Click back button                    │ page. AR scene disposed properly.    │                  │          │
+│              │                                      │ Memory cleaned up.                   │                  │          │
+└──────────────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┴──────────┘
+
+
+9. ANALYTICS MODULE - TEST CASES
+=================================
+
+┌──────────────┬──────────────────────────────────────┬──────────────────────────────────────┬──────────────────┬──────────┐
+│ Test Case ID │ Step Details                         │ Expected Results                     │ Actual Results   │ Status   │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_001     │ User visits monument details page    │ View recorded in monument_views      │                  │          │
+│              │ System tracks view                   │ table. User ID (if logged in) and    │                  │          │
+│              │                                      │ timestamp saved.                     │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_002     │ User views monument page             │ View count incremented by 1 in       │                  │          │
+│              │ System updates view count            │ monuments table. Counter updated.    │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_003     │ Guest user (not logged in)           │ View tracked with session_id only.   │                  │          │
+│              │ Views monument page                  │ user_id field null. View counted.    │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_004     │ Admin logged in                      │ Analytics dashboard displayed.       │                  │          │
+│              │ Navigate to Analytics page           │ Charts and statistics visible.       │                  │          │
+│              │ View dashboard                       │ Key metrics shown.                   │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_005     │ View analytics dashboard             │ Total monument count displayed       │                  │          │
+│              │ Check total monuments metric         │ accurately. Count from database.     │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_006     │ View analytics dashboard             │ Total approved story count shown.    │                  │          │
+│              │ Check total stories metric           │ Pending/rejected excluded.           │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_007     │ View analytics dashboard             │ Total user/profile count displayed.  │                  │          │
+│              │ Check total users metric             │ Accurate count from profiles table.  │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_008     │ View analytics dashboard             │ Total quiz completion count shown.   │                  │          │
+│              │ Check quiz completions metric        │ Sum from quiz_completions table.     │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_009     │ View analytics dashboard             │ Top 5 monuments by rating displayed. │                  │          │
+│              │ Check top rated monuments            │ Sorted descending. Names and ratings │                  │          │
+│              │                                      │ shown.                               │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_010     │ View analytics dashboard             │ Top 5 monuments by view count shown. │                  │          │
+│              │ Check most viewed monuments          │ Sorted by views (highest first).     │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_011     │ View analytics dashboard             │ Recent 10 activities displayed with  │                  │          │
+│              │ Check recent activities              │ timestamps. Monument names and users │                  │          │
+│              │                                      │ shown. Chronological order.          │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ ANLY_012     │ Non-admin user                       │ Access denied. Analytics not visible.│                  │          │
+│              │ Try to access Analytics page         │ Admin privileges required message.   │                  │          │
+└──────────────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┴──────────┘
+
+
+10. SEARCH AND FILTER MODULE - TEST CASES
+==========================================
+
+┌──────────────┬──────────────────────────────────────┬──────────────────────────────────────┬──────────────────┬──────────┐
+│ Test Case ID │ Step Details                         │ Expected Results                     │ Actual Results   │ Status   │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_001     │ Navigate to monuments page           │ Search bar visible. Placeholder text │                  │          │
+│              │ View search interface                │ shown. Ready for input.              │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_002     │ Enter "Palace" in search box         │ Monuments with "Palace" in name,     │                  │          │
+│              │ Execute search                       │ location, or description shown.      │                  │          │
+│              │                                      │ Case-insensitive matching.           │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_003     │ Enter "xyz123notfound" in search     │ No results message displayed. Empty  │                  │          │
+│              │ Execute search                       │ monuments list. Suggestion to browse │                  │          │
+│              │                                      │ all monuments.                       │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_004     │ Search for "mysore"                  │ Results include monuments from       │                  │          │
+│              │ Check location matching              │ Mysore location. Location field      │                  │          │
+│              │                                      │ matched successfully.                │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_005     │ Search for keyword in description    │ Monuments with matching description  │                  │          │
+│              │ Enter description-specific term      │ text shown. Full-text search works.  │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_006     │ Browse monuments page                │ Location filter dropdown/options     │                  │          │
+│              │ Select location filter "Hampi"       │ visible. Only Hampi monuments shown. │                  │          │
+│              │ Apply filter                         │ Other locations filtered out.        │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_007     │ Browse monuments page                │ Era filter applied. Only monuments   │                  │          │
+│              │ Select era filter "Hoysala"          │ from Hoysala period displayed.       │                  │          │
+│              │ Apply filter                         │                                      │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_008     │ Browse monuments page                │ Only monuments with rating >= 4.0    │                  │          │
+│              │ Set minimum rating filter to 4.0     │ displayed. Lower-rated monuments     │                  │          │
+│              │ Apply filter                         │ hidden.                              │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_009     │ Apply search term "temple"           │ Combined search and filter applied.  │                  │          │
+│              │ Apply location filter "Hampi"        │ Only Hampi temples shown. Both       │                  │          │
+│              │ View results                         │ conditions satisfied.                │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_010     │ Search for "PALACE" (uppercase)      │ Results shown regardless of case.    │                  │          │
+│              │ Execute search                       │ Case-insensitive search confirmed.   │                  │          │
+│              │                                      │ Same results as "palace".            │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_011     │ Apply multiple filters               │ All filters active. Monuments must   │                  │          │
+│              │ Location + Era + Min Rating          │ satisfy all conditions. Correct      │                  │          │
+│              │ View filtered results                │ subset displayed.                    │                  │          │
+├──────────────┼──────────────────────────────────────┼──────────────────────────────────────┼──────────────────┼──────────┤
+│ SRCH_012     │ Apply filters                        │ Filters cleared. All monuments       │                  │          │
+│              │ Click "Clear Filters" button         │ displayed again. Search reset.       │                  │          │
+└──────────────┴──────────────────────────────────────┴──────────────────────────────────────┴──────────────────┴──────────┘
+
+
+================================================================================
+TEST EXECUTION INSTRUCTIONS
+================================================================================
+
+1. FILLING OUT TEST CASES:
+   - Execute each test case step by step
+   - Record actual results in "Actual Results" column
+   - Mark Status as: PASS / FAIL / BLOCKED / NOT TESTED
+   - If test fails, document the issue and error details
+
+2. STATUS DEFINITIONS:
+   - PASS: Test completed successfully, actual matches expected
+   - FAIL: Test completed but actual does not match expected
+   - BLOCKED: Cannot execute due to dependencies or bugs
+   - NOT TESTED: Test not yet executed
+
+3. DEFECT REPORTING:
+   - For failed tests, create detailed bug report
+   - Include: Test Case ID, Steps to reproduce, Expected vs Actual
+   - Attach screenshots, logs, or error messages
+   - Assign severity: Critical / High / Medium / Low
+
+4. REGRESSION TESTING:
+   - Re-run all test cases after bug fixes
+   - Verify fixes don't break existing functionality
+   - Update test cases if requirements change
+
+5. TEST COVERAGE:
+   - Total Test Cases: 120
+   - Modules Covered: 10
+   - Coverage Areas: Functionality, UI/UX, Error Handling, Security
+
+
+================================================================================
+END OF TEST CASES DOCUMENT
+================================================================================

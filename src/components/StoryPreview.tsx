@@ -107,56 +107,117 @@ export const StoryPreview = () => {
         throw new Error('No story content available');
       }
 
-      // Call the edge function to get audio from Google TTS
-      const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text, language: language === 'en' ? 'en' : 'kn' }
-      });
+      // Try to call the edge function to get audio from Google TTS
+      let audioContent: string | null = null;
+      try {
+        const { data, error } = await supabase.functions.invoke('text-to-speech', {
+          body: { text, language: language === 'en' ? 'en' : 'kn' }
+        });
 
-      if (error) {
-        throw new Error(error.message || 'Failed to generate audio');
+        if (!error && data?.audioContent) {
+          audioContent = data.audioContent;
+        } else {
+          console.warn('Edge function unavailable, falling back to Web Speech API');
+        }
+      } catch (functionError) {
+        console.warn('Edge function error, falling back to Web Speech API:', functionError);
       }
 
-      if (!data?.audioContent) {
-        throw new Error('No audio data received');
+      // If we got audio content from edge function, play it
+      if (audioContent) {
+        // Convert base64 to blob and play
+        const binaryString = atob(audioContent);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const audioBlob = new Blob([bytes], { type: 'audio/mpeg' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+
+        audio.onplay = () => {
+          toast({
+            title: "Playing Narration",
+            description: `${language === 'en' ? 'English' : 'Kannada'} narration is now playing`,
+          });
+        };
+
+        audio.onended = () => {
+          setAudioLoading(false);
+          URL.revokeObjectURL(audioUrl);
+          toast({
+            title: "Narration Complete",
+            description: `${language === 'en' ? 'English' : 'Kannada'} narration finished`,
+          });
+        };
+
+        audio.onerror = () => {
+          setAudioLoading(false);
+          toast({
+            title: "Error",
+            description: "Failed to play audio",
+            variant: "destructive",
+          });
+        };
+
+        audio.play();
+      } else {
+        // Fallback to Web Speech API
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = language === 'en' ? 'en-US' : 'kn-IN';
+          utterance.rate = 0.9;
+          utterance.pitch = 1;
+          
+          // Get available voices
+          let voices = window.speechSynthesis.getVoices();
+          
+          if (voices.length === 0) {
+            await new Promise<void>((resolve) => {
+              const onVoicesChanged = () => {
+                voices = window.speechSynthesis.getVoices();
+                window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+                resolve();
+              };
+              window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
+              setTimeout(resolve, 1000);
+            });
+          }
+          
+          const langCode = language === 'en' ? 'en' : 'kn';
+          const voice = voices.find(v => v.lang.startsWith(langCode)) || voices.find(v => v.lang.includes('en')) || voices[0];
+          if (voice) utterance.voice = voice;
+          
+          utterance.onend = () => {
+            setAudioLoading(false);
+            toast({
+              title: "Narration Complete",
+              description: `${language === 'en' ? 'English' : 'Kannada'} narration finished`,
+            });
+          };
+
+          utterance.onerror = (event) => {
+            setAudioLoading(false);
+            toast({
+              title: "Error",
+              description: "Failed to play audio narration",
+              variant: "destructive",
+            });
+          };
+          
+          window.speechSynthesis.speak(utterance);
+          
+          toast({
+            title: "Playing Narration",
+            description: `${language === 'en' ? 'English' : 'Kannada'} narration is now playing`,
+          });
+        } else {
+          throw new Error('Speech synthesis not supported in your browser');
+        }
       }
-
-      // Convert base64 to blob and play
-      const binaryString = atob(data.audioContent);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      const audioBlob = new Blob([bytes], { type: 'audio/mpeg' });
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-
-      audio.onplay = () => {
-        toast({
-          title: "Playing Narration",
-          description: `${language === 'en' ? 'English' : 'Kannada'} narration is now playing`,
-        });
-      };
-
-      audio.onended = () => {
-        setAudioLoading(false);
-        URL.revokeObjectURL(audioUrl);
-        toast({
-          title: "Narration Complete",
-          description: `${language === 'en' ? 'English' : 'Kannada'} narration finished`,
-        });
-      };
-
-      audio.onerror = () => {
-        setAudioLoading(false);
-        toast({
-          title: "Error",
-          description: "Failed to play audio",
-          variant: "destructive",
-        });
-      };
-
-      audio.play();
     } catch (error: any) {
       setAudioLoading(false);
       console.error('Audio error:', error);

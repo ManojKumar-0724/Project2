@@ -12,6 +12,13 @@ interface Monument {
   era: string;
 }
 
+interface ModelConfig {
+  url: string;
+  scale: number;
+  y: number;
+  rotationY?: number;
+}
+
 // Fallback monument data
 const fallbackMonuments: Record<string, { title: string; story: string }> = {
   hampi: {
@@ -28,6 +35,15 @@ const fallbackMonuments: Record<string, { title: string; story: string }> = {
   },
 };
 
+const modelConfigs: Record<string, ModelConfig> = {
+  golconda: { url: '/models/taj_mahal_3d_model.glb', scale: 0.6, y: -1.6 },
+  'golconda-fort': { url: '/models/taj_mahal_3d_model.glb', scale: 0.6, y: -1.6 },
+  meenakshi: { url: '/models/meenakshi-temple.glb', scale: 1.0, y: -1.6 },
+  'meenakshi-temple': { url: '/models/meenakshi-temple.glb', scale: 1.0, y: -1.6 },
+  hampi: { url: '/models/hampi-ruins.glb', scale: 1.1, y: -1.6 },
+  'hampi-ruins': { url: '/models/hampi-ruins.glb', scale: 1.1, y: -1.6 },
+};
+
 const ARViewer = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -37,9 +53,11 @@ const ARViewer = () => {
   const [mode, setMode] = useState<'3d' | 'camera'>('3d');
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string>('');
+  const [modelScale, setModelScale] = useState(0.15);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const animationRef = useRef<number>();
+  const modelScaleRef = useRef(0.15);
 
   useEffect(() => {
     if (monumentId) {
@@ -65,6 +83,10 @@ const ARViewer = () => {
       }
     };
   }, [loading, mode, monument]);
+
+  useEffect(() => {
+    modelScaleRef.current = modelScale;
+  }, [modelScale]);
 
   const fetchMonument = async () => {
     try {
@@ -99,6 +121,18 @@ const ARViewer = () => {
     return fallbackMonuments[key] || fallbackMonuments.hampi;
   };
 
+  const normalizeKey = (value: string) =>
+    value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+  const getModelConfig = () => {
+    if (monument?.title) {
+      const titleKey = normalizeKey(monument.title);
+      if (modelConfigs[titleKey]) return modelConfigs[titleKey];
+    }
+    const key = monumentId?.toLowerCase() || 'hampi';
+    return modelConfigs[key] || null;
+  };
+
   const initThreeJS = async () => {
     if (!canvasRef.current) return;
 
@@ -114,12 +148,15 @@ const ARViewer = () => {
 
     // Camera
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-    camera.position.z = 5;
+    camera.position.z = 7;
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
 
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -133,74 +170,118 @@ const ARViewer = () => {
     pointLight.position.set(-5, 3, 5);
     scene.add(pointLight);
 
-    // Create monument representation
-    const monumentInfo = getCurrentMonument();
+    // Model group (realistic glTF model)
+    const modelRoot = new THREE.Group();
+    scene.add(modelRoot);
 
-    // Base platform
-    const platformGeometry = new THREE.CylinderGeometry(2, 2.2, 0.3, 32);
-    const platformMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x8b4513,
-      metalness: 0.3,
-      roughness: 0.7
-    });
-    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
-    platform.position.y = -1.5;
-    scene.add(platform);
-
-    // Main structure (temple-like)
-    const baseGeometry = new THREE.BoxGeometry(1.5, 1, 1.5);
-    const baseMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xc1502e,
-      metalness: 0.2,
-      roughness: 0.8
-    });
-    const base = new THREE.Mesh(baseGeometry, baseMaterial);
-    base.position.y = -0.8;
-    scene.add(base);
-
-    // Tower
-    const towerGeometry = new THREE.ConeGeometry(0.8, 2, 4);
-    const towerMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xffd700,
-      metalness: 0.5,
-      roughness: 0.3
-    });
-    const tower = new THREE.Mesh(towerGeometry, towerMaterial);
-    tower.position.y = 0.7;
-    tower.rotation.y = Math.PI / 4;
-    scene.add(tower);
-
-    // Decorative ring
-    const ringGeometry = new THREE.TorusGeometry(1.2, 0.08, 16, 100);
-    const ringMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xffd700,
-      metalness: 0.8,
-      roughness: 0.2
-    });
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.position.y = 0;
-    ring.rotation.x = Math.PI / 2;
-    scene.add(ring);
-
-    // Floating orbs
-    const orbGeometry = new THREE.SphereGeometry(0.15, 32, 32);
+    let ring: InstanceType<typeof THREE.Mesh> | null = null;
     const orbs: InstanceType<typeof THREE.Mesh>[] = [];
-    const orbColors = [0xff6b6b, 0x4ecdc4, 0xffe66d, 0x95e1d3];
-    
-    for (let i = 0; i < 4; i++) {
-      const orbMaterial = new THREE.MeshStandardMaterial({
-        color: orbColors[i],
-        emissive: orbColors[i],
-        emissiveIntensity: 0.3
+
+    const createFallbackMonument = () => {
+      // Base platform
+      const platformGeometry = new THREE.CylinderGeometry(2, 2.2, 0.3, 32);
+      const platformMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x8b4513,
+        metalness: 0.3,
+        roughness: 0.7
       });
-      const orb = new THREE.Mesh(orbGeometry, orbMaterial);
-      orb.position.set(
-        Math.cos(i * Math.PI / 2) * 2,
-        0.5,
-        Math.sin(i * Math.PI / 2) * 2
-      );
-      scene.add(orb);
-      orbs.push(orb);
+      const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+      platform.position.y = -1.5;
+      modelRoot.add(platform);
+
+      // Main structure (temple-like)
+      const baseGeometry = new THREE.BoxGeometry(1.5, 1, 1.5);
+      const baseMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xc1502e,
+        metalness: 0.2,
+        roughness: 0.8
+      });
+      const base = new THREE.Mesh(baseGeometry, baseMaterial);
+      base.position.y = -0.8;
+      modelRoot.add(base);
+
+      // Tower
+      const towerGeometry = new THREE.ConeGeometry(0.8, 2, 4);
+      const towerMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xffd700,
+        metalness: 0.5,
+        roughness: 0.3
+      });
+      const tower = new THREE.Mesh(towerGeometry, towerMaterial);
+      tower.position.y = 0.7;
+      tower.rotation.y = Math.PI / 4;
+      modelRoot.add(tower);
+
+      // Decorative ring
+      const ringGeometry = new THREE.TorusGeometry(1.2, 0.08, 16, 100);
+      const ringMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xffd700,
+        metalness: 0.8,
+        roughness: 0.2
+      });
+      ring = new THREE.Mesh(ringGeometry, ringMaterial);
+      ring.position.y = 0;
+      ring.rotation.x = Math.PI / 2;
+      modelRoot.add(ring);
+
+      // Floating orbs
+      const orbGeometry = new THREE.SphereGeometry(0.15, 32, 32);
+      const orbColors = [0xff6b6b, 0x4ecdc4, 0xffe66d, 0x95e1d3];
+      
+      for (let i = 0; i < 4; i++) {
+        const orbMaterial = new THREE.MeshStandardMaterial({
+          color: orbColors[i],
+          emissive: orbColors[i],
+          emissiveIntensity: 0.3
+        });
+        const orb = new THREE.Mesh(orbGeometry, orbMaterial);
+        orb.position.set(
+          Math.cos(i * Math.PI / 2) * 2,
+          0.5,
+          Math.sin(i * Math.PI / 2) * 2
+        );
+        modelRoot.add(orb);
+        orbs.push(orb);
+      }
+    };
+
+    const modelConfig = getModelConfig();
+    const baseScale = modelConfig?.scale ?? 1;
+
+    if (modelConfig) {
+      try {
+        const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
+        const loader = new GLTFLoader();
+        loader.load(
+          modelConfig.url,
+          (gltf) => {
+            modelRoot.clear();
+            const model = gltf.scene;
+            model.traverse((child: InstanceType<typeof THREE.Object3D>) => {
+              const mesh = child as InstanceType<typeof THREE.Mesh>;
+              if (mesh.isMesh) {
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+              }
+            });
+            model.scale.setScalar(1);
+            model.position.y = modelConfig.y;
+            if (modelConfig.rotationY) {
+              model.rotation.y = modelConfig.rotationY;
+            }
+            modelRoot.add(model);
+          },
+          undefined,
+          () => {
+            createFallbackMonument();
+          }
+        );
+      } catch (error) {
+        console.error('Model load error:', error);
+        createFallbackMonument();
+      }
+    } else {
+      createFallbackMonument();
     }
 
     // Stars background
@@ -269,21 +350,22 @@ const ARViewer = () => {
       }
 
       // Apply rotations
-      base.rotation.y = rotationY;
-      tower.rotation.y = rotationY + Math.PI / 4;
-      platform.rotation.y = rotationY;
-      ring.rotation.z = time;
+      modelRoot.rotation.y = rotationY;
+      modelRoot.scale.setScalar(baseScale * modelScaleRef.current);
+      if (ring) ring.rotation.z = time;
 
       // Animate orbs
-      orbs.forEach((orb, i) => {
-        orb.position.x = Math.cos(time + i * Math.PI / 2) * 2;
-        orb.position.z = Math.sin(time + i * Math.PI / 2) * 2;
-        orb.position.y = 0.5 + Math.sin(time * 2 + i) * 0.3;
-      });
+      if (orbs.length) {
+        orbs.forEach((orb, i) => {
+          orb.position.x = Math.cos(time + i * Math.PI / 2) * 2;
+          orb.position.z = Math.sin(time + i * Math.PI / 2) * 2;
+          orb.position.y = 0.5 + Math.sin(time * 2 + i) * 0.3;
+        });
+      }
 
       // Camera orbit based on rotation
-      camera.position.x = Math.sin(rotationY * 0.3) * 2;
-      camera.position.y = 2 + rotationX * 2;
+      camera.position.x = Math.sin(rotationY * 0.3) * 3.5;
+      camera.position.y = 2.5 + rotationX * 2;
       camera.lookAt(0, 0, 0);
 
       renderer.render(scene, camera);
@@ -429,6 +511,21 @@ const ARViewer = () => {
       <div className="absolute bottom-4 left-0 right-0 z-50 flex justify-center gap-3 px-4">
         {mode === '3d' ? (
           <>
+            <div className="flex items-center gap-3 bg-card/90 backdrop-blur-sm border rounded-lg px-3 py-2">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Model Size</span>
+              <input
+                type="range"
+                min={0.1}
+                max={1.5}
+                step={0.05}
+                value={modelScale}
+                onChange={(e) => setModelScale(Number(e.target.value))}
+                className="w-28 accent-heritage-terracotta"
+              />
+              <span className="text-xs text-muted-foreground w-10 text-right">
+                {Math.round(modelScale * 100)}%
+              </span>
+            </div>
             <Button
               onClick={startCamera}
               className="bg-heritage-terracotta hover:bg-heritage-terracotta/90 text-heritage-cream"
