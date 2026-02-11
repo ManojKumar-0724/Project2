@@ -556,20 +556,7 @@ const ARViewer = () => {
         </div>
       )}
 
-      {/* Info Panel */}
-      <div className="absolute bottom-20 left-0 right-0 z-50 p-4">
-        <div className="bg-card/95 backdrop-blur-sm text-card-foreground p-4 rounded-xl max-w-md mx-auto shadow-lg border">
-          <h3 className="font-bold text-lg text-heritage-terracotta mb-2">
-            {currentMonument.title}
-          </h3>
-          <p className="text-sm text-muted-foreground mb-3">
-            {currentMonument.story}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {mode === '3d' ? '👆 Drag or swipe to rotate • Pinch to zoom' : '� Swipe to rotate the AR model'}
-          </p>
-        </div>
-      </div>
+      {/* Info Panel - Hidden */}
 
       {/* Controls */}
       <div className="absolute bottom-4 left-0 right-0 z-50 flex justify-center gap-3 px-4">
