@@ -192,16 +192,28 @@ export default function MonumentDetails() {
     
     setSummaryLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('summarize-text', {
-        body: { text: monument.description, length: summaryLength }
-      });
-
-      if (error) throw error;
-      setSummary(data.summary);
+      // Simple client-side text summarization
+      const text = monument.description || '';
+      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+      
+      let summaryText = '';
+      if (summaryLength === 'short') {
+        // First 2 sentences
+        summaryText = sentences.slice(0, 2).join('. ') + '.';
+      } else if (summaryLength === 'medium') {
+        // First 4-5 sentences
+        summaryText = sentences.slice(0, Math.min(5, sentences.length)).join('. ') + '.';
+      } else {
+        // Detailed: Most of the content (at least 8 sentences or all if fewer)
+        const detailedCount = Math.max(8, Math.ceil(sentences.length * 0.8));
+        summaryText = sentences.slice(0, Math.min(detailedCount, sentences.length)).join('. ') + '.';
+      }
+      
+      setSummary(summaryText || 'No summary available for this content.');
       
       toast({
         title: "Summary Generated",
-        description: "AI-powered summary is ready",
+        description: "Summary is ready",
       });
     } catch (error: any) {
       toast({

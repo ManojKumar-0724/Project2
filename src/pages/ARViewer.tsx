@@ -432,8 +432,12 @@ const ARViewer = () => {
               }
               modelRoot.add(model);
             },
-            undefined,
-            () => {
+            (progress) => {
+              const percent = (progress.loaded / progress.total * 100).toFixed(0);
+              console.log(`Loading ${modelConfig.url}: ${percent}%`);
+            },
+            (error) => {
+              console.error('GLB load error:', error, 'URL:', modelConfig.url);
               createFallbackMonument();
             }
           );
