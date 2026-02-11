@@ -42,6 +42,8 @@ const modelConfigs: Record<string, ModelConfig> = {
   'meenakshi-temple': { url: '/models/meenakshi-temple.glb', scale: 2.0, y: -1.6 },
   hampi: { url: '/models/hampi-ruins.glb', scale: 2.2, y: -1.6 },
   'hampi-ruins': { url: '/models/hampi-ruins.glb', scale: 2.2, y: -1.6 },
+  'taj-mahal': { url: '/models/uploads_files_2270154_tajmahal.STL', scale: 0.02, y: -1.6 },
+  tajmahal: { url: '/models/uploads_files_2270154_tajmahal.STL', scale: 0.02, y: -1.6 },
 };
 
 const ARViewer = () => {
@@ -268,32 +270,73 @@ const ARViewer = () => {
 
     if (modelConfig) {
       try {
-        const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
-        const loader = new GLTFLoader();
-        loader.load(
-          modelConfig.url,
-          (gltf) => {
-            modelRoot.clear();
-            const model = gltf.scene;
-            model.traverse((child: InstanceType<typeof THREE.Object3D>) => {
-              const mesh = child as InstanceType<typeof THREE.Mesh>;
-              if (mesh.isMesh) {
-                mesh.castShadow = true;
-                mesh.receiveShadow = true;
+        const fileExtension = modelConfig.url.split('.').pop()?.toLowerCase();
+        
+        if (fileExtension === 'stl') {
+          // Load STL model
+          const { STLLoader } = await import('three/examples/jsm/loaders/STLLoader.js');
+          const loader = new STLLoader();
+          loader.load(
+            modelConfig.url,
+            (geometry) => {
+              modelRoot.clear();
+              // STL models need material and mesh creation
+              const material = new THREE.MeshStandardMaterial({
+                color: 0xc1502e,
+                metalness: 0.3,
+                roughness: 0.6
+              });
+              const mesh = new THREE.Mesh(geometry, material);
+              mesh.castShadow = true;
+              mesh.receiveShadow = true;
+              
+              // Center the geometry
+              geometry.computeBoundingBox();
+              const center = new THREE.Vector3();
+              geometry.boundingBox!.getCenter(center);
+              geometry.translate(-center.x, -center.y, -center.z);
+              
+              mesh.scale.setScalar(1);
+              mesh.position.y = modelConfig.y;
+              if (modelConfig.rotationY) {
+                mesh.rotation.y = modelConfig.rotationY;
               }
-            });
-            model.scale.setScalar(1);
-            model.position.y = modelConfig.y;
-            if (modelConfig.rotationY) {
-              model.rotation.y = modelConfig.rotationY;
+              modelRoot.add(mesh);
+            },
+            undefined,
+            () => {
+              createFallbackMonument();
             }
-            modelRoot.add(model);
-          },
-          undefined,
-          () => {
-            createFallbackMonument();
-          }
-        );
+          );
+        } else {
+          // Load GLB/GLTF model
+          const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
+          const loader = new GLTFLoader();
+          loader.load(
+            modelConfig.url,
+            (gltf) => {
+              modelRoot.clear();
+              const model = gltf.scene;
+              model.traverse((child: InstanceType<typeof THREE.Object3D>) => {
+                const mesh = child as InstanceType<typeof THREE.Mesh>;
+                if (mesh.isMesh) {
+                  mesh.castShadow = true;
+                  mesh.receiveShadow = true;
+                }
+              });
+              model.scale.setScalar(1);
+              model.position.y = modelConfig.y;
+              if (modelConfig.rotationY) {
+                model.rotation.y = modelConfig.rotationY;
+              }
+              modelRoot.add(model);
+            },
+            undefined,
+            () => {
+              createFallbackMonument();
+            }
+          );
+        }
       } catch (error) {
         console.error('Model load error:', error);
         createFallbackMonument();
