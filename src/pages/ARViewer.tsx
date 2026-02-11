@@ -36,12 +36,12 @@ const fallbackMonuments: Record<string, { title: string; story: string }> = {
 };
 
 const modelConfigs: Record<string, ModelConfig> = {
-  golconda: { url: '/models/create_golconda_fort.glb', scale: 0.6, y: -1.6 },
-  'golconda-fort': { url: '/models/create_golconda_fort.glb', scale: 0.6, y: -1.6 },
-  meenakshi: { url: '/models/meenakshi-temple.glb', scale: 1.0, y: -1.6 },
-  'meenakshi-temple': { url: '/models/meenakshi-temple.glb', scale: 1.0, y: -1.6 },
-  hampi: { url: '/models/hampi-ruins.glb', scale: 1.1, y: -1.6 },
-  'hampi-ruins': { url: '/models/hampi-ruins.glb', scale: 1.1, y: -1.6 },
+  golconda: { url: '/models/create_golconda_fort.glb', scale: 1.2, y: -1.6 },
+  'golconda-fort': { url: '/models/create_golconda_fort.glb', scale: 1.2, y: -1.6 },
+  meenakshi: { url: '/models/meenakshi-temple.glb', scale: 2.0, y: -1.6 },
+  'meenakshi-temple': { url: '/models/meenakshi-temple.glb', scale: 2.0, y: -1.6 },
+  hampi: { url: '/models/hampi-ruins.glb', scale: 2.2, y: -1.6 },
+  'hampi-ruins': { url: '/models/hampi-ruins.glb', scale: 2.2, y: -1.6 },
 };
 
 const ARViewer = () => {
@@ -53,11 +53,13 @@ const ARViewer = () => {
   const [mode, setMode] = useState<'3d' | 'camera'>('3d');
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string>('');
-  const [modelScale, setModelScale] = useState(0.15);
+  const [modelScale, setModelScale] = useState(0.6);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const animationRef = useRef<number>();
-  const modelScaleRef = useRef(0.15);
+  const modelScaleRef = useRef(0.6);
+  const touchStartRef = useRef({ x: 0, y: 0 });
+  const [swipeDirection, setSwipeDirection] = useState<string>('');
 
   useEffect(() => {
     if (monumentId) {
@@ -337,12 +339,61 @@ const ARViewer = () => {
       previousMousePosition = { x: e.clientX, y: e.clientY };
     });
 
-    // Touch support
+    // Enhanced Touch support with swipe gestures
+    let touchStartPos = { x: 0, y: 0 };
+    let touchStartTime = 0;
+    const SWIPE_THRESHOLD = 50; // minimum distance for swipe
+    const SWIPE_TIME_LIMIT = 300; // max time for swipe (ms)
+
     canvas.addEventListener('touchstart', (e) => {
       isDragging = true;
-      previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      const touch = e.touches[0];
+      previousMousePosition = { x: touch.clientX, y: touch.clientY };
+      touchStartPos = { x: touch.clientX, y: touch.clientY };
+      touchStartTime = Date.now();
     });
-    canvas.addEventListener('touchend', () => isDragging = false);
+    
+    canvas.addEventListener('touchend', (e) => {
+      if (isDragging) {
+        const touchEndTime = Date.now();
+        const timeDiff = touchEndTime - touchStartTime;
+        
+        if (e.changedTouches.length > 0) {
+          const touch = e.changedTouches[0];
+          const deltaX = touch.clientX - touchStartPos.x;
+          const deltaY = touch.clientY - touchStartPos.y;
+          
+          // Detect swipe gestures
+          if (timeDiff < SWIPE_TIME_LIMIT) {
+            if (Math.abs(deltaX) > SWIPE_THRESHOLD || Math.abs(deltaY) > SWIPE_THRESHOLD) {
+              let direction = '';
+              if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                direction = deltaX > 0 ? 'Right Swipe' : 'Left Swipe';
+                rotationY += deltaX > 0 ? 0.5 : -0.5;
+              } else {
+                direction = deltaY > 0 ? 'Down Swipe' : 'Up Swipe';
+                rotationX += deltaY > 0 ? 0.3 : -0.3;
+                rotationX = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, rotationX));
+              }
+              // Show swipe feedback
+              if (direction) {
+                const existingFeedback = document.getElementById('swipe-feedback');
+                if (existingFeedback) existingFeedback.remove();
+                
+                const feedback = document.createElement('div');
+                feedback.id = 'swipe-feedback';
+                feedback.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-heritage-terracotta/90 text-white px-6 py-3 rounded-full text-lg font-bold z-50 pointer-events-none';
+                feedback.textContent = direction;
+                document.body.appendChild(feedback);
+                setTimeout(() => feedback.remove(), 800);
+              }
+            }
+          }
+        }
+      }
+      isDragging = false;
+    });
+    
     canvas.addEventListener('touchmove', (e) => {
       if (isDragging && e.touches.length === 1) {
         const deltaX = e.touches[0].clientX - previousMousePosition.x;
@@ -512,7 +563,7 @@ const ARViewer = () => {
             {currentMonument.story}
           </p>
           <p className="text-xs text-muted-foreground">
-            {mode === '3d' ? '👆 Drag to rotate the 3D view' : '📱 Point camera at any surface'}
+            {mode === '3d' ? '👆 Drag or swipe to rotate • Pinch to zoom' : '📱 Point camera at any surface'}
           </p>
         </div>
       </div>
