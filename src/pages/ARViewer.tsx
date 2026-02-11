@@ -42,8 +42,8 @@ const modelConfigs: Record<string, ModelConfig> = {
   'meenakshi-temple': { url: '/models/meenakshi-temple.glb', scale: 2.0, y: -1.6 },
   hampi: { url: '/models/hampi-ruins.glb', scale: 2.2, y: -1.6 },
   'hampi-ruins': { url: '/models/hampi-ruins.glb', scale: 2.2, y: -1.6 },
-  'taj-mahal': { url: '/models/uploads_files_2270154_tajmahal.STL', scale: 0.02, y: -1.6 },
-  tajmahal: { url: '/models/uploads_files_2270154_tajmahal.STL', scale: 0.02, y: -1.6 },
+  'taj-mahal': { url: '/models/Tajmahal_model.obj', scale: 0.015, y: -1.6 },
+  tajmahal: { url: '/models/Tajmahal_model.obj', scale: 0.015, y: -1.6 },
 };
 
 const ARViewer = () => {
@@ -306,6 +306,83 @@ const ARViewer = () => {
             undefined,
             () => {
               createFallbackMonument();
+            }
+          );
+        } else if (fileExtension === 'obj') {
+          // Load OBJ model with MTL materials
+          const { OBJLoader } = await import('three/examples/jsm/loaders/OBJLoader.js');
+          const { MTLLoader } = await import('three/examples/jsm/loaders/MTLLoader.js');
+          
+          const mtlPath = modelConfig.url.replace('.obj', '.mtl');
+          const modelPath = modelConfig.url.substring(0, modelConfig.url.lastIndexOf('/') + 1);
+          
+          const mtlLoader = new MTLLoader();
+          mtlLoader.setPath(modelPath);
+          mtlLoader.load(
+            mtlPath.substring(mtlPath.lastIndexOf('/') + 1),
+            (materials) => {
+              materials.preload();
+              const objLoader = new OBJLoader();
+              objLoader.setMaterials(materials);
+              objLoader.load(
+                modelConfig.url,
+                (object) => {
+                  modelRoot.clear();
+                  object.traverse((child: InstanceType<typeof THREE.Object3D>) => {
+                    const mesh = child as InstanceType<typeof THREE.Mesh>;
+                    if (mesh.isMesh) {
+                      mesh.castShadow = true;
+                      mesh.receiveShadow = true;
+                    }
+                  });
+                  object.scale.setScalar(1);
+                  object.position.y = modelConfig.y;
+                  if (modelConfig.rotationY) {
+                    object.rotation.y = modelConfig.rotationY;
+                  }
+                  modelRoot.add(object);
+                },
+                undefined,
+                () => {
+                  createFallbackMonument();
+                }
+              );
+            },
+            undefined,
+            () => {
+              // If MTL fails, load OBJ without materials
+              const objLoader = new OBJLoader();
+              objLoader.load(
+                modelConfig.url,
+                (object) => {
+                  modelRoot.clear();
+                  object.traverse((child: InstanceType<typeof THREE.Object3D>) => {
+                    const mesh = child as InstanceType<typeof THREE.Mesh>;
+                    if (mesh.isMesh) {
+                      mesh.castShadow = true;
+                      mesh.receiveShadow = true;
+                      // Apply default material if no MTL
+                      if (!mesh.material) {
+                        mesh.material = new THREE.MeshStandardMaterial({
+                          color: 0xc1502e,
+                          metalness: 0.3,
+                          roughness: 0.6
+                        });
+                      }
+                    }
+                  });
+                  object.scale.setScalar(1);
+                  object.position.y = modelConfig.y;
+                  if (modelConfig.rotationY) {
+                    object.rotation.y = modelConfig.rotationY;
+                  }
+                  modelRoot.add(object);
+                },
+                undefined,
+                () => {
+                  createFallbackMonument();
+                }
+              );
             }
           );
         } else {
