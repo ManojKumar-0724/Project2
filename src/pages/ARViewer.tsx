@@ -74,8 +74,8 @@ const ARViewer = () => {
   }, [monumentId]);
 
   useEffect(() => {
-    if (!loading && mode === '3d') {
-      initThreeJS();
+    if (!loading && (mode === '3d' || mode === 'camera')) {
+      initThreeJS(mode === 'camera');
     }
     return () => {
       if (animationRef.current) {
@@ -146,7 +146,7 @@ const ARViewer = () => {
     return modelConfigs[key] || null;
   };
 
-  const initThreeJS = async () => {
+  const initThreeJS = async (isCameraMode: boolean) => {
     if (!canvasRef.current) return;
 
     const THREE = await import('three');
@@ -157,19 +157,22 @@ const ARViewer = () => {
 
     // Scene setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1a2e);
+    scene.background = isCameraMode ? null : new THREE.Color(0x1a1a2e);
 
     // Camera
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     camera.position.z = 7;
 
     // Renderer
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
+    if (isCameraMode) {
+      renderer.setClearColor(0x000000, 0);
+    }
 
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -460,13 +463,11 @@ const ARViewer = () => {
         </div>
       </div>
 
-      {/* 3D Canvas View */}
-      {mode === '3d' && (
-        <canvas 
-          ref={canvasRef} 
-          className="w-full h-full touch-none"
-        />
-      )}
+      {/* 3D Canvas View / AR Overlay */}
+      <canvas 
+        ref={canvasRef} 
+        className={`w-full h-full ${mode === 'camera' ? 'pointer-events-none absolute inset-0 z-10' : 'touch-none'}`}
+      />
 
       {/* Camera View with AR Overlay */}
       {mode === 'camera' && (
