@@ -517,7 +517,7 @@ const ARViewer = () => {
       {/* 3D Canvas View / AR Overlay */}
       <canvas 
         ref={canvasRef} 
-        className={`w-full h-full ${mode === 'camera' ? 'pointer-events-none absolute inset-0 z-10' : 'touch-none'}`}
+        className={`w-full h-full ${mode === 'camera' ? 'absolute inset-0 z-10' : 'touch-none'}`}
       />
 
       {/* Camera View with AR Overlay */}
@@ -531,13 +531,16 @@ const ARViewer = () => {
             className="w-full h-full object-cover"
           />
           {/* AR Overlay */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="bg-black/60 backdrop-blur-sm rounded-xl p-6 max-w-sm mx-4 text-center animate-pulse">
-              <h2 className="text-heritage-gold text-2xl font-bold mb-2">
+          <div className="absolute inset-0 flex items-start justify-center pointer-events-none pt-24">
+            <div className="bg-black/60 backdrop-blur-sm rounded-xl p-4 max-w-sm mx-4 text-center">
+              <h2 className="text-heritage-gold text-xl font-bold mb-2">
                 {currentMonument.title}
               </h2>
-              <p className="text-white text-sm">
+              <p className="text-white text-xs mb-2">
                 {currentMonument.story}
+              </p>
+              <p className="text-heritage-gold text-xs font-semibold">
+                👆 Swipe to rotate the 3D model
               </p>
             </div>
           </div>
@@ -563,7 +566,7 @@ const ARViewer = () => {
             {currentMonument.story}
           </p>
           <p className="text-xs text-muted-foreground">
-            {mode === '3d' ? '👆 Drag or swipe to rotate • Pinch to zoom' : '📱 Point camera at any surface'}
+            {mode === '3d' ? '👆 Drag or swipe to rotate • Pinch to zoom' : '� Swipe to rotate the AR model'}
           </p>
         </div>
       </div>
