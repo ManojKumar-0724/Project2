@@ -85,6 +85,19 @@ const ARViewer = () => {
   }, [loading, mode, monument]);
 
   useEffect(() => {
+    if (mode === 'camera' && cameraStream && videoRef.current) {
+      const video = videoRef.current;
+      video.srcObject = cameraStream;
+      video.muted = true;
+      video.playsInline = true;
+      video.play().catch((error) => {
+        console.error('Video play error:', error);
+        setCameraError('Camera started, but video could not play. Please tap the screen to start playback.');
+      });
+    }
+  }, [mode, cameraStream]);
+
+  useEffect(() => {
     modelScaleRef.current = modelScale;
   }, [modelScale]);
 
@@ -393,10 +406,6 @@ const ARViewer = () => {
       });
       setCameraStream(stream);
       setMode('camera');
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
     } catch (error: any) {
       console.error('Camera error:', error);
       setCameraError(
